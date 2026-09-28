@@ -15,6 +15,10 @@ dependencies = [
     "tree-sitter-python>=0.23",
     "tree-sitter-javascript>=0.23",
     "tree-sitter-typescript>=0.23",
+    "tree-sitter-go>=0.23",
+    "tree-sitter-java>=0.23",
+    "tree-sitter-php>=0.23",
+    "tree-sitter-c-sharp>=0.23",
     # V1 — static analysis
     "bandit[toml]>=1.8",
     # V2 — LLM reasoning (Groq only per project constraint)
@@ -55,3 +59,7 @@ addopts = "-v"
 [tool.coverage.run]
 source = ["scanner"]
 omit = ["tests/*"]
+
+[tool.coverage.report]
+# measured 80% at introduction; ratchet upward, never down
+fail_under = 75

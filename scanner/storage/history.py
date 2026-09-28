@@ -81,14 +81,14 @@ class ScanHistoryDB:
                 ),
             )
 
-            for f in result.findings:
-                conn.execute(
-                    """
-                    INSERT INTO scan_findings (
-                        finding_id, scan_id, file_path, issue_type, category,
-                        severity, confidence, line_start, line_end, rule_source, has_fix_patch
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+            conn.executemany(
+                """
+                INSERT INTO scan_findings (
+                    finding_id, scan_id, file_path, issue_type, category,
+                    severity, confidence, line_start, line_end, rule_source, has_fix_patch
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
                     (
                         f.id,
                         result.scan_id,
@@ -101,8 +101,10 @@ class ScanHistoryDB:
                         f.line_end,
                         f.rule_source,
                         bool(f.fix_patch),
-                    ),
-                )
+                    )
+                    for f in result.findings
+                ],
+            )
         log.info("Recorded scan %s to history DB at %s", result.scan_id, self.db_path)
         return result.scan_id
 

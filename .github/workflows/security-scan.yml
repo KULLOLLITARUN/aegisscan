@@ -32,7 +32,7 @@ jobs:
           gitleaks version
 
       - name: Run tests
-        run: python -m pytest -q
+        run: python -m pytest -q --cov=scanner --cov-report=term-missing --cov-fail-under=75
 
       - name: Run AegisScan Security Audit
         env:

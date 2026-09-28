@@ -142,9 +142,13 @@ MIT License — free for open-source and commercial use.
 |---|---|---|
 | `GROQ_API_KEY`, `OPENAI_API_KEY` | `.env` / environment | LLM providers (failover order: Groq → OpenAI → Ollama) |
 | `OPENAI_BASE_URL`, `AEGISSCAN_OPENAI_MODEL` | environment | Point the OpenAI provider at a compatible endpoint / pick a model |
+| `AEGISSCAN_GROQ_MODELS` | environment | Comma-separated Groq model ids (first is the default). Retired/unknown models are skipped automatically |
+| `AEGISSCAN_LLM_WORKERS`, `AEGISSCAN_LLM_RPM` | environment | Parallel LLM calls (default 4) and the global requests-per-minute cap (default 10) |
 | `AEGISSCAN_ALLOWED_ROOTS` | environment | Extra directories the web server may scan (`;` on Windows, `:` elsewhere). Default: project root only |
 | `exclude_dirs` | `.aegisscan.toml` in the scan target | Directory names skipped by Bandit and the optimizer (tests/ and examples/ are scanned by default) |
 
 Static tools: Bandit and the built-in optimizer ship with the package; install Semgrep with `pip install ".[static]"` and Gitleaks from its [releases page](https://github.com/gitleaks/gitleaks/releases). Missing tools are skipped, never fatal.
 
 The web server (`--server`) binds to `127.0.0.1`, sends no CORS headers and rejects non-local `Host`/`Origin` headers.
+
+Tree-sitter chunking covers Python, JavaScript, TypeScript, Go, Java, PHP and C#; other languages (including SQL) use the generic chunker.

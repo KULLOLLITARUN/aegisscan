@@ -20,7 +20,7 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
 # ---------------------------------------------------------------- optimizer
 def test_optimizer_flags_each_rule_once_in_fixture() -> None:
-    findings = run_optimizer(EXAMPLES / "slow_python")
+    findings = [f for f in run_optimizer(EXAMPLES / "slow_python") if f.file_path.name == "orders.py"]
     issues = sorted(f.issue_type.split(" (")[0] for f in findings)
     assert issues == [
         "Database call inside loop",

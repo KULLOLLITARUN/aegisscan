@@ -17,6 +17,7 @@ from pathlib import Path
 from scanner.models.finding import Finding
 from scanner.static_analysis.bandit_runner import run_bandit
 from scanner.static_analysis.gitleaks_runner import run_gitleaks
+from scanner.static_analysis.optimization_runner import run_optimizer
 from scanner.static_analysis.semgrep_runner import run_semgrep
 
 log = logging.getLogger(__name__)
@@ -57,6 +58,12 @@ def run_all_tools(target: Path) -> tuple[list[Finding], list[str]]:
         tools_run.append("gitleaks")
     else:
         log.debug("Gitleaks: no findings or not available")
+
+    # --- Optimizer (pure-Python AST checks, always available) ---
+    opt_findings = run_optimizer(target)
+    if opt_findings:
+        all_findings.extend(opt_findings)
+        tools_run.append("aegis-optimizer")
 
     log.info(
         "Static analysis complete: %d findings from %d tool(s): %s",

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AegisScan — Security & Optimization Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg-dark: #07090e;
+    --bg-card: rgba(17, 24, 39, 0.7);
+    --bg-card-hover: rgba(31, 41, 55, 0.8);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-bright: rgba(56, 189, 248, 0.3);
+    --text-main: #f3f4f6;
+    --text-muted: #9ca3af;
+    --cyan-glow: #38bdf8;
+    --emerald-glow: #10b981;
+    --amber-glow: #f59e0b;
+    --rose-glow: #f43f5e;
+    --purple-glow: #a855f7;
+    --radius-lg: 16px;
+    --radius-md: 10px;
+    --radius-sm: 6px;
+    --shadow-glow: 0 0 25px rgba(56, 189, 248, 0.15);
+  }
+
+  body {
+    background-color: var(--bg-dark);
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 32px 24px;
+    line-height: 1.5;
+  }
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-icon {
+    width: 42px;
+    height: 42px;
+    background: linear-gradient(135deg, var(--cyan-glow), var(--purple-glow));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 20px;
+    color: #fff;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+  }
+  .brand-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(to right, #ffffff, var(--text-muted));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .brand-badge {
+    background: rgba(56, 189, 248, 0.1);
+    color: var(--cyan-glow);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  /* Grid Layout */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+    margin-bottom: 32px;
+  }
+  @media (max-width: 960px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Cards */
+  .glass-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  .glass-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  /* Scanner Panel Form */
+  .panel-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .form-group {
+    margin-bottom: 16px;
+  }
+  .form-label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .form-input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    color: var(--text-main);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus {
+    border-color: var(--cyan-glow);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+  }
+  .form-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .checkbox-label input {
+    accent-color: var(--cyan-glow);
+    width: 16px;
+    height: 16px;
+  }
+
+  .btn-primary {
+    width: 100%;
+    background: linear-gradient(135deg, var(--cyan-glow), #2563eb);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 12px 20px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.3);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.4);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  /* Score Gauges Panel */
+  .gauges-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+  }
+  .gauge-box {
+    text-align: center;
+  }
+  .gauge-svg {
+    transform: rotate(-90deg);
+    width: 120px;
+    height: 120px;
+  }
+  .gauge-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.05);
+    stroke-width: 8;
+  }
+  .gauge-progress {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease-in-out;
+  }
+  .gauge-text {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-top: -85px;
+    margin-bottom: 35px;
+  }
+  .gauge-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Findings Section */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .tabs {
+    display: flex;
+    gap: 8px;
+  }
+  .tab-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab-btn.active {
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--cyan-glow);
+    border-color: rgba(56, 189, 248, 0.4);
+  }
+
+  /* Finding Item Card */
+  .finding-card {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .finding-card:hover {
+    border-color: var(--border-bright);
+    background: rgba(15, 23, 42, 0.9);
+  }
+  .finding-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .badge-critical { background: rgba(244, 63, 94, 0.2); color: var(--rose-glow); border: 1px solid rgba(244, 63, 94, 0.4); }
+  .badge-high { background: rgba(244, 63, 94, 0.15); color: var(--rose-glow); border: 1px solid rgba(244, 63, 94, 0.3); }
+  .badge-medium { background: rgba(245, 158, 11, 0.15); color: var(--amber-glow); border: 1px solid rgba(245, 158, 11, 0.3); }
+  .badge-low { background: rgba(56, 189, 248, 0.15); color: var(--cyan-glow); border: 1px solid rgba(56, 189, 248, 0.3); }
+  
+  .file-loc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--cyan-glow);
+  }
+  .issue-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+  }
+  .evidence-preview {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 8px 12px;
+    border-radius: 4px;
+    color: #e2e8f0;
+    overflow-x: auto;
+  }
+
+  /* Slide Drawer */
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: -550px;
+    width: 550px;
+    height: 100vh;
+    background: #0f172a;
+    border-left: 1px solid var(--border);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 32px;
+    overflow-y: auto;
+  }
+  .drawer.open {
+    right: 0;
+  }
+  .drawer-close {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+  .diff-block {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--emerald-glow);
+    padding: 12px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    color: #e6edf3;
+    margin-top: 12px;
+  }
+
+  /* Copy Button */
+  .btn-copy {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--emerald-glow);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <!-- Navbar -->
+    <div class="navbar">
+      <div class="brand">
+        <div class="brand-icon">🛡️</div>
+        <div>
+          <div class="brand-title">AegisScan Command Center</div>
+          <div style="font-size:0.8rem;color:var(--text-muted)">AI-Driven Workspace Security & Optimization</div>
+        </div>
+      </div>
+      <div class="brand-badge">V10 Interactive Web Server</div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="dashboard-grid">
+      <!-- Scanner Controls -->
+      <div class="glass-card">
+        <div class="panel-title">⚡ Workspace Scanner Launcher</div>
+        <div class="form-group">
+          <label class="form-label">Target Directory Path</label>
+          <input type="text" id="targetPath" class="form-input" value="." placeholder="Enter target path..." />
+        </div>
+        <div class="form-group form-row">
+          <label class="checkbox-label"><input type="checkbox" id="staticOnly" checked /> Static Analysis Only</label>
+          <label class="checkbox-label"><input type="checkbox" id="deepMode" /> Deep Audit Mode</label>
+          <label class="checkbox-label"><input type="checkbox" id="genPatches" checked /> Generate AI Fix Patches</label>
+        </div>
+        <button class="btn-primary" onclick="triggerScan()">🚀 Execute AegisScan Pipeline</button>
+        <div id="scanStatus" style="margin-top:16px;font-size:0.85rem;color:var(--text-muted)">System status: Idle and ready.</div>
+      </div>
+
+      <!-- Live Score Gauges -->
+      <div class="glass-card gauges-container">
+        <div style="display:flex;gap:24px;justify-content:center;width:100%">
+          <!-- Security Gauge -->
+          <div class="gauge-box">
+            <svg class="gauge-svg" viewBox="0 0 36 36">
+              <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path id="secGaugePath" class="gauge-progress" stroke="var(--emerald-glow)" stroke-dasharray="100, 100" stroke-dashoffset="30" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <div class="gauge-text" id="secScoreVal">--</div>
+            <div class="gauge-label">Security Score</div>
+          </div>
+          <!-- Optimization Gauge -->
+          <div class="gauge-box">
+            <svg class="gauge-svg" viewBox="0 0 36 36">
+              <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path id="optGaugePath" class="gauge-progress" stroke="var(--cyan-glow)" stroke-dasharray="100, 100" stroke-dashoffset="10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <div class="gauge-text" id="optScoreVal">--</div>
+            <div class="gauge-label">Optimization</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Findings Section -->
+    <div class="glass-card">
+      <div class="section-header">
+        <div class="panel-title">🔍 Detected Vulnerabilities & Findings</div>
+        <div class="tabs">
+          <button class="tab-btn active" onclick="filterSev('ALL')">All</button>
+          <button class="tab-btn" onclick="filterSev('HIGH')">High / Critical</button>
+          <button class="tab-btn" onclick="filterSev('MEDIUM')">Medium</button>
+          <button class="tab-btn" onclick="filterSev('LOW')">Low</button>
+        </div>
+      </div>
+      <div id="findingsContainer">
+        <div style="color:var(--text-muted);text-align:center;padding:32px">Run a scan above to populate finding telemetry.</div>
+      </div>
+    </div>
+
+    <!-- SQLite Scan History Section -->
+    <div class="glass-card" style="margin-top:24px">
+      <div class="panel-title">📊 SQLite Historical Scan Log</div>
+      <div id="historyContainer" style="color:var(--text-muted);font-size:0.85rem">Loading history logs...</div>
+    </div>
+  </div>
+
+  <!-- Detail Slide Drawer -->
+  <div id="drawer" class="drawer">
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+    <div id="drawerContent">Select a finding card to view full details and AI fix patches.</div>
+  </div>
+
+<script>
+let currentFindings = [];
+let activeFilter = 'ALL';
+
+function setGauge(id, textId, score) {
+  const val = score !== null ? Math.round(score) : 0;
+  document.getElementById(textId).innerText = score !== null ? Math.round(score) : '--';
+  const path = document.getElementById(id);
+  const offset = 100 - val;
+  path.style.strokeDashoffset = offset;
+}
+
+async function triggerScan() {
+  const status = document.getElementById('scanStatus');
+  status.innerHTML = '⏳ <strong>Executing scan pipeline... Please wait.</strong>';
+  const path = document.getElementById('targetPath').value;
+  const staticOnly = document.getElementById('staticOnly').checked;
+  const deep = document.getElementById('deepMode').checked;
+  const generatePatches = document.getElementById('genPatches').checked;
+
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, static_only: staticOnly, deep, generate_patches: generatePatches })
+    });
+    const result = await res.json();
+    setGauge('secGaugePath', 'secScoreVal', result.security_score);
+    setGauge('optGaugePath', 'optScoreVal', result.optimization_score);
+    currentFindings = result.findings || [];
+    renderFindings();
+    status.innerHTML = `✅ <strong>Scan Complete!</strong> Analyzed ${result.files_analyzed} files in ${result.scan_duration_seconds}s. Total Findings: ${currentFindings.length}`;
+    loadHistory();
+  } catch (e) {
+    status.innerHTML = '❌ <strong>Scan failed:</strong> ' + e.message;
+  }
+}
+
+function renderFindings() {
+  const container = document.getElementById('findingsContainer');
+  let filtered = currentFindings;
+  if (activeFilter === 'HIGH') filtered = currentFindings.filter(f => f.severity === 'HIGH' || f.severity === 'CRITICAL');
+  if (activeFilter === 'MEDIUM') filtered = currentFindings.filter(f => f.severity === 'MEDIUM');
+  if (activeFilter === 'LOW') filtered = currentFindings.filter(f => f.severity === 'LOW');
+
+  if (!filtered.length) {
+    container.innerHTML = '<div style="color:var(--text-muted);padding:24px;text-align:center">No findings matching active filter.</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map((f, idx) => {
+    const sevClass = 'badge-' + (f.severity || 'low').toLowerCase();
+    return `
+      <div class="finding-card" onclick="openDrawer(${idx})">
+        <div class="finding-header">
+          <span class="badge ${sevClass}">${f.severity}</span>
+          <span class="file-loc">${f.file_path}:${f.line_start}</span>
+        </div>
+        <div class="issue-name">${f.issue_type}</div>
+        <div class="evidence-preview">${f.evidence ? f.evidence.substring(0, 100) : 'No evidence preview'}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterSev(sev) {
+  activeFilter = sev;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  renderFindings();
+}
+
+function openDrawer(idx) {
+  const f = currentFindings[idx];
+  if (!f) return;
+  const content = document.getElementById('drawerContent');
+  content.innerHTML = `
+    <h2 style="font-size:1.2rem;margin-bottom:12px">${f.issue_type}</h2>
+    <div style="font-family:'JetBrains Mono',monospace;color:var(--cyan-glow);margin-bottom:16px">${f.file_path}:${f.line_start}</div>
+    <div style="font-size:0.9rem;margin-bottom:16px;color:var(--text-muted)">${f.explanation || 'No explanation provided.'}</div>
+    ${f.fix_patch ? `
+      <div style="font-weight:600;margin-top:16px">AI Unified Git Patch</div>
+      <div class="diff-block">${f.fix_patch}</div>
+      <button class="btn-copy" onclick="navigator.clipboard.writeText(\`${f.fix_patch.replace(/`/g, '\\`')}\`)">📋 Copy Fix Patch</button>
+    ` : ''}
+  `;
+  document.getElementById('drawer').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/history');
+    const data = await res.json();
+    const container = document.getElementById('historyContainer');
+    if (!data.length) {
+      container.innerHTML = 'No history recorded in SQLite DB yet.';
+      return;
+    }
+    container.innerHTML = data.slice(0, 5).map(h => `
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span>${h.timestamp ? h.timestamp.substring(0,19) : ''}</span>
+        <span>Security: <strong>${h.security_score !== null ? h.security_score.toFixed(1) : 'N/A'}</strong></span>
+        <span>Findings: ${h.total_findings}</span>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+loadHistory();
+</script>
+</body>
+</html>

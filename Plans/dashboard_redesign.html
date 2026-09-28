@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AegisScan — Command Deck</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  /* ============ LIGHT — polished quartz / daylight obsidian (default) ============ */
+  :root {
+    --base:         #f3f4f7;
+    --surface:      #ffffff;
+    --surface-2:    #eef0f4;
+    --surface-3:    #e5e8ee;
+    --sidebar-bg:   var(--surface);
+    --topbar-bg:    rgba(243, 244, 247, 0.86);
+
+    --hairline:     rgba(23, 25, 33, 0.09);
+    --hairline-2:   rgba(23, 25, 33, 0.16);
+
+    --text-1:       #16181f;
+    --text-2:       #565a68;
+    --text-3:       #8b8f9c;
+
+    --glint:        #0c9488;
+    --glint-dim:    rgba(12, 148, 136, 0.09);
+    --ember:        #a9761b;
+    --ember-deep:   #7a5713;
+    --ember-dim:    rgba(169, 118, 27, 0.10);
+    --ember-glow:   rgba(169, 118, 27, 0.22);
+
+    --critical:     #dc2626;  --critical-bg: rgba(220, 38, 38, 0.08);
+    --high:         #d9700f;  --high-bg:     rgba(217, 112, 15, 0.09);
+    --medium:       #a16207;  --medium-bg:   rgba(161, 98, 7, 0.09);
+    --low:          #15803d;  --low-bg:      rgba(21, 128, 61, 0.09);
+    --info:         #2563eb;
+
+    --cat-injection: #7c3aed;
+    --cat-crypto:    #be185d;
+    --cat-bestprac:  #64748b;
+
+    --glow-a:       rgba(169, 118, 27, 0.05);
+    --glow-b:       rgba(12, 148, 136, 0.045);
+
+    /* console / live-activity — its own light+dark pair so it never defaults to plain black */
+    --console-bg:     #f7f8fa;
+    --console-border: var(--hairline-2);
+    --console-ts:     #9a9ea9;
+    --console-ok:     #16a34a;
+    --console-warn:   #c2620a;
+    --console-info:   #0c9488;
+    --console-msg:    #454955;
+    --console-hl:     #16181f;
+
+    --panel-shadow: 0 1px 2px rgba(23,25,33,0.03), 0 6px 16px rgba(23,25,33,0.035);
+
+    --sidebar-w: 226px;
+    --topbar-h: 58px;
+    --r: 4px;
+  }
+
+  /* ============ DARK — midnight obsidian (toggled) ============ */
+  html[data-theme="dark"] {
+    --base:         #08090d;
+    --surface:      #14161f;
+    --surface-2:    #1a1d29;
+    --surface-3:    #202333;
+    --sidebar-bg:   #0e1016;
+    --topbar-bg:    rgba(8, 9, 13, 0.86);
+
+    --hairline:     rgba(228, 224, 255, 0.07);
+    --hairline-2:   rgba(228, 224, 255, 0.15);
+
+    --text-1:       #f1eee6;
+    --text-2:       #9c9aae;
+    --text-3:       #58566a;
+
+    --glint:        #45d6c8;
+    --glint-dim:    rgba(69, 214, 200, 0.13);
+    --ember:        #d9a544;
+    --ember-deep:   #a97a2c;
+    --ember-dim:    rgba(217, 165, 68, 0.14);
+    --ember-glow:   rgba(217, 165, 68, 0.22);
+
+    --critical:     #f2455f;  --critical-bg: rgba(242, 69, 95, 0.13);
+    --high:         #ff8a42;  --high-bg:     rgba(255, 138, 66, 0.13);
+    --medium:       #eab308;  --medium-bg:   rgba(234, 179, 8, 0.13);
+    --low:          #3ed598;  --low-bg:      rgba(62, 213, 152, 0.13);
+    --info:         #5b8def;
+
+    --cat-injection: #b78cf0;
+    --cat-crypto:    #f472b6;
+    --cat-bestprac:  #7d8299;
+
+    --glow-a:       rgba(217, 165, 68, 0.05);
+    --glow-b:       rgba(69, 214, 200, 0.045);
+
+    --console-bg:     #06070a;
+    --console-border: #23262f;
+    --console-ts:     #676b7a;
+    --console-ok:     #4ade80;
+    --console-warn:   #fb923c;
+    --console-info:   #2dd4bf;
+    --console-msg:    #b7bac4;
+    --console-hl:     #f4f5f7;
+
+    --panel-shadow: none;
+  }
+
+  * , *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--base);
+    color: var(--text-1);
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+    position: relative;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  body::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 900px 500px at -5% -10%, var(--glow-a), transparent 55%),
+      radial-gradient(ellipse 900px 600px at 105% 105%, var(--glow-b), transparent 55%);
+  }
+
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace; }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; }
+
+  /* ---------- shell ---------- */
+  .shell { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+
+  .sidebar {
+    width: var(--sidebar-w); flex-shrink: 0;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--hairline);
+    display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 20px 20px 17px; border-bottom: 1px solid var(--hairline); }
+  .brand-mark {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--ember), var(--ember-deep));
+    clip-path: polygon(0 0, 100% 0, 100% 68%, 68% 100%, 0 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 15px; color: #fff;
+    flex-shrink: 0;
+  }
+  html[data-theme="dark"] .brand-mark { color: #08090d; }
+  .brand-name { font-family: 'Chakra Petch', sans-serif; font-weight: 600; font-size: 15.5px; letter-spacing: 0.01em; }
+  .brand-sub { font-size: 10.5px; color: var(--text-3); font-weight: 500; letter-spacing: 0.03em; text-transform: uppercase; margin-top: 1px; }
+
+  .nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
+  .nav-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); padding: 12px 10px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 8px 10px; border-radius: 3px;
+    color: var(--text-2); font-size: 13px; font-weight: 500; cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+  .nav-item .fct { width: 6px; height: 6px; flex-shrink: 0; background: var(--text-3); transform: rotate(45deg); }
+  .nav-item:hover { background: var(--surface-2); color: var(--text-1); }
+  .nav-item.active { background: var(--glint-dim); color: var(--text-1); border-left-color: var(--glint); font-weight: 600; }
+  .nav-item.active .fct { background: var(--glint); }
+  .nav-item .badge { margin-left: auto; font-size: 10px; font-weight: 700; background: var(--critical-bg); color: var(--critical); padding: 1px 6px; border-radius: 9px; }
+  .nav-item .badge.new { background: var(--glint-dim); color: var(--glint); }
+
+  .sidebar-foot { padding: 14px 20px 18px; border-top: 1px solid var(--hairline); font-size: 10.5px; color: var(--text-3); display: flex; align-items: center; justify-content: space-between; }
+  .sidebar-foot .pulse { width: 6px; height: 6px; background: var(--low); transform: rotate(45deg); }
+
+  .main { margin-left: var(--sidebar-w); flex: 1; min-width: 0; }
+
+  .topbar {
+    height: var(--topbar-h); border-bottom: 1px solid var(--hairline);
+    display: flex; align-items: center; gap: 10px; padding: 0 26px;
+    position: sticky; top: 0; background: var(--topbar-bg);
+    backdrop-filter: blur(10px); z-index: 5;
+  }
+  .target-field { display: flex; align-items: center; gap: 9px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r); padding: 6px 13px; font-size: 12px; flex: 1; max-width: 500px; }
+  .target-field .lbl { color: var(--text-3); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .target-field .val { color: var(--text-2); }
+  .topbar-spacer { flex: 1; }
+  .status-pill { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 500; color: var(--text-2); padding: 5px 13px; border: 1px solid var(--hairline); border-radius: 20px; background: var(--surface); }
+  .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--low); }
+
+  /* theme toggle */
+  .theme-toggle {
+    display: flex; align-items: center; gap: 6px;
+    width: 34px; height: 34px; padding: 0;
+    border-radius: 50%; border: 1px solid var(--hairline); background: var(--surface);
+    cursor: pointer; color: var(--text-2); justify-content: center;
+    flex-shrink: 0;
+  }
+  .theme-toggle:hover { color: var(--text-1); border-color: var(--hairline-2); }
+  .theme-toggle svg { width: 16px; height: 16px; }
+  .theme-toggle .i-sun { display: none; }
+  .theme-toggle .i-moon { display: block; }
+  html[data-theme="dark"] .theme-toggle .i-sun { display: block; }
+  html[data-theme="dark"] .theme-toggle .i-moon { display: none; }
+
+  .btn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; padding: 7px 15px; border-radius: var(--r); border: 1px solid var(--hairline); cursor: pointer; }
+  .btn-ghost { background: var(--surface); color: var(--text-2); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--ember), var(--ember-deep)); color: #fff; border: none; font-weight: 700;
+    clip-path: polygon(0 0, 100% 0, 100% 65%, 88% 100%, 0 100%);
+    padding: 7px 18px 7px 16px;
+    box-shadow: 0 3px 10px var(--ember-glow);
+  }
+  html[data-theme="dark"] .btn-primary { color: #14100a; }
+
+  .page { padding: 28px 30px 60px; max-width: 1400px; margin: 0 auto; }
+
+  .page-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; gap: 20px; }
+  .page-head .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--glint); margin-bottom: 5px; }
+  .page-head h1 { font-family: 'Chakra Petch', sans-serif; font-size: 24px; font-weight: 600; letter-spacing: 0.005em; color: var(--text-1); }
+  .page-head .meta { text-align: right; font-size: 11px; color: var(--text-3); line-height: 1.7; }
+  .page-head .meta strong { color: var(--text-2); font-weight: 600; }
+
+  /* ---------- hero row ---------- */
+  .hero-row { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 14px; margin-bottom: 14px; align-items: stretch; }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r);
+    display: flex; flex-direction: column; min-width: 0;
+    box-shadow: var(--panel-shadow);
+  }
+  .panel-head { padding: 15px 18px 12px; border-bottom: 1px solid var(--hairline); display: flex; align-items: center; justify-content: space-between; }
+  .panel-head h3 { font-family: 'Chakra Petch', sans-serif; font-size: 13.5px; font-weight: 600; letter-spacing: 0.01em; color: var(--text-1); }
+  .panel-head .sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+  .panel-body { padding: 18px; flex: 1; display: flex; flex-direction: column; }
+
+  .hero-panel { clip-path: polygon(0 0, 100% 0, 100% 92%, 96% 100%, 0 100%); }
+  .hero-body { display: flex; align-items: center; gap: 26px; }
+  .hero-gauge { flex-shrink: 0; position: relative; width: 208px; }
+  .hero-readout { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 8px; }
+  .hero-readout .num { font-family: 'Chakra Petch', sans-serif; font-size: 46px; font-weight: 700; line-height: 1; color: var(--high); }
+  .hero-readout .word { font-size: 11.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--high); margin-top: 2px; }
+
+  .hero-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .hero-verdict { font-size: 13px; color: var(--text-2); line-height: 1.65; }
+  .hero-verdict strong { color: var(--text-1); font-weight: 600; }
+
+  .opt-inline { display: flex; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+  .opt-inline .ring { width: 40px; height: 40px; flex-shrink: 0; }
+  .opt-inline .lbl { font-size: 10.5px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .opt-inline .val { font-family: 'Chakra Petch', sans-serif; font-size: 16px; font-weight: 600; color: var(--low); }
+
+  /* tabs */
+  .tabs { display: flex; gap: 2px; background: var(--surface-3); padding: 2px; border-radius: 3px; }
+  .tab { font-size: 10.5px; font-weight: 600; padding: 3px 10px; border-radius: 2px; color: var(--text-3); cursor: pointer; }
+  .tab.active { background: var(--surface); color: var(--text-1); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+  /* live activity console — themed, never hardcoded black */
+  .log { background: var(--console-bg); border: 1px solid var(--console-border); border-radius: 3px; padding: 12px 14px; font-size: 11.3px; line-height: 1.9; flex: 1; overflow-y: auto; max-height: 196px; }
+  .log .ts { color: var(--console-ts); margin-right: 9px; }
+  .log .ev-ok::before { content: "◆"; color: var(--console-ok); margin-right: 8px; font-size: 7px; }
+  .log .ev-warn::before { content: "◆"; color: var(--console-warn); margin-right: 8px; font-size: 7px; }
+  .log .ev-info::before { content: "◆"; color: var(--console-info); margin-right: 8px; font-size: 7px; }
+  .log .msg { color: var(--console-msg); }
+  .log .hl { color: var(--console-hl); font-weight: 600; }
+  .log-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 11px; font-size: 10.5px; color: var(--text-3); }
+  .live-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--low); font-weight: 600; }
+  .live-chip .r { width: 5px; height: 5px; border-radius: 50%; background: var(--low); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @media (prefers-reduced-motion: reduce) { .live-chip .r { animation: none; } }
+
+  /* ---------- severity strip ---------- */
+  .strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 14px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r); padding: 13px 16px 12px;
+    box-shadow: var(--panel-shadow);
+  }
+  .stat .top-row { display: flex; align-items: center; gap: 8px; }
+  .stat .fct { width: 7px; height: 7px; background: var(--stat-color); transform: rotate(45deg); flex-shrink: 0; }
+  .stat .label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); }
+  .stat .count-row { display: flex; align-items: baseline; gap: 9px; margin-top: 9px; }
+  .stat .count { font-family: 'Chakra Petch', sans-serif; font-size: 27px; font-weight: 600; color: var(--text-1); }
+  .stat .delta { font-size: 10.5px; color: var(--text-3); font-weight: 500; }
+  .stat .delta.flat::before { content: "no change"; }
+  .stat svg.spark { display: block; margin-top: 9px; width: 100%; height: 20px; }
+
+  /* ---------- row 2 : category + table ---------- */
+  .row2 { display: grid; grid-template-columns: 0.8fr 1.4fr; gap: 14px; }
+
+  .donut-wrap { display: flex; align-items: center; gap: 20px; flex: 1; }
+  .legend { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0; }
+  .legend-row { display: flex; align-items: center; gap: 9px; font-size: 12px; }
+  .legend-row .sw { width: 8px; height: 8px; transform: rotate(45deg); flex-shrink: 0; }
+  .legend-row .lname { color: var(--text-2); flex: 1; font-weight: 500; }
+  .legend-row .lcount { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--text-1); }
+  .legend-row .lpct { color: var(--text-3); font-size: 10.5px; width: 32px; text-align: right; }
+
+  .table-panel { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r); overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--panel-shadow); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); padding: 11px 18px; background: var(--surface-2); border-bottom: 1px solid var(--hairline); }
+  tbody td { padding: 11px 18px; border-bottom: 1px solid var(--hairline); font-size: 12.5px; vertical-align: middle; color: var(--text-1); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+
+  .sev-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; padding: 2px 9px 2px 7px; border-radius: 20px; }
+  .sev-chip::before { content: ""; width: 6px; height: 6px; transform: rotate(45deg); background: currentColor; }
+  .sev-chip.high { color: var(--high); background: var(--high-bg); }
+  .sev-chip.med  { color: var(--medium); background: var(--medium-bg); }
+
+  .conf-meter { display: flex; align-items: center; gap: 7px; }
+  .conf-meter .track { width: 42px; height: 3px; background: var(--surface-3); overflow: hidden; }
+  .conf-meter .fill { height: 100%; background: var(--glint); }
+  .conf-meter .pct { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--text-3); width: 28px; }
+
+  .file-cell { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--glint); }
+  .file-cell .ln { color: var(--text-3); }
+  .issue-name { font-weight: 500; color: var(--text-1); }
+  .cat-tag { font-size: 10px; font-weight: 600; padding: 2px 8px; background: var(--surface-2); color: var(--text-2); border-radius: 3px; }
+
+  .concept-tag { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.04em; color: var(--text-3); border: 1px solid var(--hairline); padding: 2px 8px; border-radius: 20px; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: var(--hairline-2); }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">Æ</div>
+      <div>
+        <div class="brand-name">AegisScan</div>
+        <div class="brand-sub">Command Deck</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="nav-label">Workspace</div>
+      <div class="nav-item active"><span class="fct"></span>Dashboard</div>
+      <div class="nav-item"><span class="fct"></span>Findings<span class="badge">12</span></div>
+      <div class="nav-item"><span class="fct"></span>Files</div>
+      <div class="nav-item"><span class="fct"></span>Scans</div>
+      <div class="nav-item"><span class="fct"></span>Logs<span class="badge new">live</span></div>
+      <div class="nav-label">Governance</div>
+      <div class="nav-item"><span class="fct"></span>Rules &amp; Tools</div>
+      <div class="nav-item"><span class="fct"></span>Baseline</div>
+      <div class="nav-item"><span class="fct"></span>Settings</div>
+    </nav>
+    <div class="sidebar-foot">
+      <span class="mono">v1.0.0</span>
+      <span style="display:flex;align-items:center;gap:7px"><span class="pulse"></span>Server online</span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="target-field">
+        <span class="lbl">Target</span>
+        <span class="val mono">…examples\vulnerable_python</span>
+      </div>
+      <div class="topbar-spacer"></div>
+      <span class="status-pill"><span class="dot"></span>Idle</span>
+      <button class="theme-toggle" id="themeToggle" title="Toggle light / dark" aria-label="Toggle theme">
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.4M12 19.1v2.4M4.4 4.4l1.7 1.7M17.9 17.9l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.4 19.6l1.7-1.7M17.9 6.1l1.7-1.7"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"/></svg>
+      </button>
+      <button class="btn btn-ghost">Options</button>
+      <button class="btn btn-primary">Run Scan</button>
+    </div>
+
+    <div class="page">
+
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Executive Overview</div>
+          <h1>Workspace Security Posture</h1>
+        </div>
+        <div class="meta">
+          Last scan <strong>2026-08-09 09:59 UTC</strong> · <span class="concept-tag">redesign concept</span><br>
+          Duration <strong>0.36s</strong> · 3 of 4 files analyzed
+        </div>
+      </div>
+
+      <!-- hero row -->
+      <div class="hero-row">
+
+        <div class="panel hero-panel">
+          <div class="panel-head">
+            <div><h3>Security Score</h3><div class="sub">Weighted across severity &amp; confidence</div></div>
+          </div>
+          <div class="panel-body">
+            <div class="hero-body">
+              <div class="hero-gauge">
+                <svg viewBox="0 0 208 128" width="208" height="128">
+                  <g stroke="var(--hairline-2)" stroke-width="2">
+                    <line x1="29" y1="104" x2="19" y2="104"/>
+                    <line x1="53.1" y1="53.1" x2="46.2" y2="46.2"/>
+                    <line x1="104" y1="28" x2="104" y2="18"/>
+                    <line x1="154.9" y1="53.1" x2="161.8" y2="46.2"/>
+                    <line x1="179" y1="104" x2="189" y2="104"/>
+                  </g>
+                  <circle cx="104" cy="104" r="80" fill="none" stroke="var(--surface-3)" stroke-width="11" stroke-dasharray="251.3 251.3" stroke-linecap="round" transform="rotate(-180 104 104)"/>
+                  <circle cx="104" cy="104" r="80" fill="none" stroke="var(--high)" stroke-width="11" stroke-dasharray="138.2 113.1" stroke-linecap="round" transform="rotate(-180 104 104)"/>
+                  <circle cx="116.5" cy="21" r="4.5" fill="var(--high)" stroke="var(--surface)" stroke-width="2"/>
+                </svg>
+                <div class="hero-readout">
+                  <div class="num">55</div>
+                  <div class="word">Poor</div>
+                </div>
+              </div>
+              <div class="hero-side">
+                <div class="hero-verdict">
+                  <strong>3 high-severity findings</strong> require attention — weak MD5 hashing and a shell-injection sink in <span class="mono">app.py</span> / <span class="mono">auth.py</span>. Static analysis complete; no LLM pass on this run.
+                </div>
+                <div class="opt-inline">
+                  <svg class="ring" viewBox="0 0 40 40">
+                    <circle cx="20" cy="20" r="16" fill="none" stroke="var(--surface-3)" stroke-width="4"/>
+                    <circle cx="20" cy="20" r="16" fill="none" stroke="var(--low)" stroke-width="4" stroke-dasharray="100.5 0.5" stroke-linecap="round" transform="rotate(-90 20 20)"/>
+                  </svg>
+                  <div>
+                    <div class="lbl">Optimization Score</div>
+                    <div class="val">100 <span style="font-size:11px;color:var(--text-3);font-weight:500">— Excellent</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>Live Activity</h3><div class="sub">Pipeline &amp; LLM provider events</div></div>
+            <div class="tabs"><div class="tab active">Activity</div><div class="tab">Summary</div></div>
+          </div>
+          <div class="panel-body">
+            <div class="log mono">
+              <div><span class="ts">12:04:02</span><span class="ev-ok"></span><span class="msg">Crawling workspace — <span class="hl">4 files</span> discovered</span></div>
+              <div><span class="ts">12:04:02</span><span class="ev-ok"></span><span class="msg">Static analysis — bandit ✓ semgrep ✓</span></div>
+              <div><span class="ts">12:04:02</span><span class="ev-warn"></span><span class="msg">gitleaks — binary not found, skipped</span></div>
+              <div><span class="ts">12:04:03</span><span class="ev-info"></span><span class="msg">Trigger engine flagged <span class="hl">6 chunks</span> for review</span></div>
+              <div><span class="ts">12:04:03</span><span class="ev-warn"></span><span class="msg">groq/llama-3.3-70b — 429 rate limited</span></div>
+              <div><span class="ts">12:04:04</span><span class="ev-ok"></span><span class="msg">groq/llama-3.1-8b-instant — OK <span class="hl">(312 tok)</span></span></div>
+              <div><span class="ts">12:04:05</span><span class="ev-ok"></span><span class="msg">Scan complete — <span class="hl">12 findings</span>, score 55/100</span></div>
+            </div>
+            <div class="log-foot">
+              <span class="live-chip"><span class="r"></span>watching for next scan</span>
+              <span style="color:var(--glint); font-weight:600; cursor:pointer;">View full log →</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- severity strip -->
+      <div class="strip">
+        <div class="stat" style="--stat-color:var(--critical)">
+          <div class="top-row"><span class="fct"></span><span class="label">Critical</span></div>
+          <div class="count-row"><span class="count">0</span><span class="delta flat"></span></div>
+          <svg class="spark" viewBox="0 0 100 20" preserveAspectRatio="none"><polyline points="0,10 25,10 50,10 75,10 100,10" fill="none" stroke="var(--text-3)" stroke-width="1.5"/></svg>
+        </div>
+        <div class="stat" style="--stat-color:var(--high)">
+          <div class="top-row"><span class="fct"></span><span class="label">High</span></div>
+          <div class="count-row"><span class="count">3</span><span class="delta flat"></span></div>
+          <svg class="spark" viewBox="0 0 100 20" preserveAspectRatio="none"><polyline points="0,10 25,8 50,12 75,6 100,10" fill="none" stroke="var(--high)" stroke-width="1.5"/></svg>
+        </div>
+        <div class="stat" style="--stat-color:var(--medium)">
+          <div class="top-row"><span class="fct"></span><span class="label">Medium</span></div>
+          <div class="count-row"><span class="count">4</span><span class="delta flat"></span></div>
+          <svg class="spark" viewBox="0 0 100 20" preserveAspectRatio="none"><polyline points="0,10 25,12 50,6 75,14 100,10" fill="none" stroke="var(--medium)" stroke-width="1.5"/></svg>
+        </div>
+        <div class="stat" style="--stat-color:var(--low)">
+          <div class="top-row"><span class="fct"></span><span class="label">Low</span></div>
+          <div class="count-row"><span class="count">5</span><span class="delta flat"></span></div>
+          <svg class="spark" viewBox="0 0 100 20" preserveAspectRatio="none"><polyline points="0,10 25,14 50,7 75,12 100,10" fill="none" stroke="var(--low)" stroke-width="1.5"/></svg>
+        </div>
+        <div class="stat" style="--stat-color:var(--info)">
+          <div class="top-row"><span class="fct"></span><span class="label">Info</span></div>
+          <div class="count-row"><span class="count">0</span><span class="delta flat"></span></div>
+          <svg class="spark" viewBox="0 0 100 20" preserveAspectRatio="none"><polyline points="0,10 25,10 50,10 75,10 100,10" fill="none" stroke="var(--text-3)" stroke-width="1.5"/></svg>
+        </div>
+      </div>
+
+      <!-- category + table -->
+      <div class="row2">
+
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>Findings by Category</h3><div class="sub">Vulnerability domain breakdown</div></div>
+          </div>
+          <div class="panel-body">
+            <div class="donut-wrap">
+              <svg width="104" height="104" viewBox="0 0 42 42" style="flex-shrink:0">
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--surface-3)" stroke-width="6"/>
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--cat-bestprac)" stroke-width="6" stroke-dasharray="41.7 58.3" stroke-dashoffset="25" stroke-linecap="round"/>
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--cat-injection)" stroke-width="6" stroke-dasharray="33.3 66.7" stroke-dashoffset="83.3" stroke-linecap="round"/>
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="var(--cat-crypto)" stroke-width="6" stroke-dasharray="25 75" stroke-dashoffset="50" stroke-linecap="round"/>
+                <text x="21" y="19.5" text-anchor="middle" font-size="7.5" font-weight="700" fill="var(--text-1)" font-family="'Chakra Petch', sans-serif">12</text>
+                <text x="21" y="26" text-anchor="middle" font-size="3.2" fill="var(--text-3)" font-family="'IBM Plex Sans', sans-serif" font-weight="500">total</text>
+              </svg>
+              <div class="legend">
+                <div class="legend-row"><span class="sw" style="background:var(--cat-bestprac)"></span><span class="lname">Best Practices</span><span class="lcount">5</span><span class="lpct">42%</span></div>
+                <div class="legend-row"><span class="sw" style="background:var(--cat-injection)"></span><span class="lname">Injection</span><span class="lcount">4</span><span class="lpct">33%</span></div>
+                <div class="legend-row"><span class="sw" style="background:var(--cat-crypto)"></span><span class="lname">Crypto</span><span class="lcount">3</span><span class="lpct">25%</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-panel">
+          <table>
+            <thead><tr><th>Severity</th><th>Confidence</th><th>Location</th><th>Issue</th><th>Category</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="sev-chip high">High</span></td>
+                <td><div class="conf-meter"><div class="track"><div class="fill" style="width:85%"></div></div><span class="pct">85%</span></div></td>
+                <td class="file-cell">app.py<span class="ln">:42</span></td>
+                <td class="issue-name">Subprocess Popen with shell=True</td>
+                <td><span class="cat-tag">injection</span></td>
+              </tr>
+              <tr>
+                <td><span class="sev-chip high">High</span></td>
+                <td><div class="conf-meter"><div class="track"><div class="fill" style="width:85%"></div></div><span class="pct">85%</span></div></td>
+                <td class="file-cell">auth.py<span class="ln">:20</span></td>
+                <td class="issue-name">Weak hash — hashlib.md5()</td>
+                <td><span class="cat-tag">crypto</span></td>
+              </tr>
+              <tr>
+                <td><span class="sev-chip high">High</span></td>
+                <td><div class="conf-meter"><div class="track"><div class="fill" style="width:85%"></div></div><span class="pct">85%</span></div></td>
+                <td class="file-cell">auth.py<span class="ln">:36</span></td>
+                <td class="issue-name">Weak hash — hashlib.md5()</td>
+                <td><span class="cat-tag">crypto</span></td>
+              </tr>
+              <tr>
+                <td><span class="sev-chip med">Medium</span></td>
+                <td><div class="conf-meter"><div class="track"><div class="fill" style="width:45%"></div></div><span class="pct">45%</span></div></td>
+                <td class="file-cell">app.py<span class="ln">:29</span></td>
+                <td class="issue-name">Hardcoded SQL expression</td>
+                <td><span class="cat-tag">injection</span></td>
+              </tr>
+              <tr>
+                <td><span class="sev-chip med">Medium</span></td>
+                <td><div class="conf-meter"><div class="track"><div class="fill" style="width:65%"></div></div><span class="pct">65%</span></div></td>
+                <td class="file-cell">app.py<span class="ln">:54</span></td>
+                <td class="issue-name">Hardcoded SQL expression</td>
+                <td><span class="cat-tag">injection</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('themeToggle');
+    var saved = localStorage.getItem('aegisscan-theme');
+    if (saved === 'dark' || saved === 'light') root.dataset.theme = saved;
+    btn.addEventListener('click', function () {
+      var next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+      localStorage.setItem('aegisscan-theme', next);
+    });
+  })();
+</script>
+
+</body>
+</html>

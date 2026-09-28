@@ -1,0 +1,43 @@
+# ---- Secrets (NEVER commit) ----
+.env
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+
+# ---- Test / coverage artifacts ----
+.pytest_cache/
+.coverage
+htmlcov/
+*.xml
+
+# ---- Tool caches ----
+.mypy_cache/
+.ruff_cache/
+.bandit/
+
+# ---- OS noise ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Node / UI ----
+node_modules/
+
+# ---- Local scan output ----
+.aegisscan_history.db
+report*.html
+report*.sarif

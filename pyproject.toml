@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aegisscan"
+version = "0.1.0"
+description = "AI-driven workspace security & optimization scanner"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "pathspec>=0.12",
+    # V1 — chunking
+    "tree-sitter>=0.23",
+    "tree-sitter-python>=0.23",
+    "tree-sitter-javascript>=0.23",
+    "tree-sitter-typescript>=0.23",
+    # V1 — static analysis
+    "bandit[toml]>=1.8",
+    # V2 — LLM reasoning (Groq only per project constraint)
+    "groq>=0.9",
+    # auto-load .env file so GROQ_API_KEY doesn't need to be set in the shell
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+aegisscan = "main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov",
+]
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.coverage.run]
+source = ["scanner"]
+omit = ["tests/*"]

@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from scanner.config import load_config
 from scanner.models.finding import Finding
 from scanner.static_analysis.bandit_runner import run_bandit
 from scanner.static_analysis.gitleaks_runner import run_gitleaks
@@ -36,7 +37,8 @@ def run_all_tools(target: Path) -> tuple[list[Finding], list[str]]:
     tools_run: list[str] = []
 
     # --- Bandit (Python SAST, always available via pip) ---
-    bandit_findings = run_bandit(target)
+    config = load_config(target)
+    bandit_findings = run_bandit(target, config.exclude_dirs)
     if bandit_findings:
         all_findings.extend(bandit_findings)
         tools_run.append("bandit")
@@ -60,7 +62,7 @@ def run_all_tools(target: Path) -> tuple[list[Finding], list[str]]:
         log.debug("Gitleaks: no findings or not available")
 
     # --- Optimizer (pure-Python AST checks, always available) ---
-    opt_findings = run_optimizer(target)
+    opt_findings = run_optimizer(target, set(config.exclude_dirs))
     if opt_findings:
         all_findings.extend(opt_findings)
         tools_run.append("aegis-optimizer")

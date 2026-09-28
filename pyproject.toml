@@ -27,6 +27,11 @@ dependencies = [
 aegisscan = "main:main"
 
 [project.optional-dependencies]
+# Semgrep is a pip package; Gitleaks is a standalone Go binary (install separately:
+# https://github.com/gitleaks/gitleaks/releases). Both are optional at runtime.
+static = [
+    "semgrep>=1.60",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov",
@@ -37,6 +42,11 @@ py-modules = ["main"]
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["scanner*"]
+
+[tool.setuptools.package-data]
+"scanner.server" = ["templates/*.html", "dist/**/*"]
+"scanner.storage" = ["schema.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

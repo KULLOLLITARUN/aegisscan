@@ -1,0 +1,3 @@
+# AegisScan config for scanning this repository itself.
+# examples/ contains intentionally vulnerable/slow code used as benchmark fixtures.
+exclude_dirs = ["examples", "tests"]

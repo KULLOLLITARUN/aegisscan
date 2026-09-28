@@ -29,7 +29,16 @@ _STANDARD_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\b(gsk_[a-zA-Z0-9]{20,})\b'), '[REDACTED_GROQ_KEY]'),
     (re.compile(r'(Bearer\s+)[a-zA-Z0-9._\-]{20,}', re.IGNORECASE), r'\1[REDACTED_TOKEN]'),
     (re.compile(r'\b(AKIA[0-9A-Z]{16})\b'), '[REDACTED_AWS_KEY]'),
-    (re.compile(r'\b([a-zA-Z0-9/+]{40})\b(?=.*aws)', re.IGNORECASE), '[REDACTED_AWS_SECRET]'),
+    # AWS secret: 40-char value assigned to an aws-ish name (the name must PRECEDE the value)
+    (
+        re.compile(r'(?i)(aws[\w.]*(?:secret|access)[\w.]*\s*[=:]\s*["\'])([A-Za-z0-9/+=]{40})(["\'])'),
+        r'\1[REDACTED_AWS_SECRET]\3',
+    ),
+    (re.compile(r'-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', re.DOTALL), '[REDACTED_PRIVATE_KEY]'),
+    (re.compile(r'\b(gh[pousr]_[A-Za-z0-9]{30,})\b'), '[REDACTED_GITHUB_TOKEN]'),
+    (re.compile(r'\b(xox[abprs]-[A-Za-z0-9-]{10,})\b'), '[REDACTED_SLACK_TOKEN]'),
+    # credentials embedded in URLs: scheme://user:password@host
+    (re.compile(r'([a-zA-Z][a-zA-Z0-9+.-]*://[^\s:/@"\']+:)[^\s@/"\']+(@)'), r'\1[REDACTED]\2'),
     (
         re.compile(
             r'(?i)(password|passwd|secret(?:_key)?|api[_-]?key|token|auth[_-]?key|private[_-]?key)'

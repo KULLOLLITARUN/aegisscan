@@ -48,6 +48,10 @@ class GroqProvider(LLMProvider):
         return "groq"
 
     @property
+    def default_model(self) -> str:
+        return DEFAULT_MODEL
+
+    @property
     def is_available(self) -> bool:
         self._api_key = os.environ.get("GROQ_API_KEY", "").strip()
         return bool(self._api_key)

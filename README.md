@@ -112,7 +112,7 @@ Without the build the server still starts and serves a basic fallback page, and 
 
 ## 🧪 Benchmark & Quality Calibration
 
-`aegisscan --benchmark` scores the scanner against a ground-truth manifest, `examples/benchmark_labels.json`: 31 files (15 clean), 88 labelled issues, written by reading the code rather than from tool output. It includes a CVE-style corpus (`examples/benchmark_corpus/`: SQL injection, command injection, deserialization, weak crypto, TLS misuse, hardcoded secrets, plus safe look-alikes) and the performance fixtures.
+`aegisscan --benchmark` scores the scanner against a ground-truth manifest, `examples/benchmark_labels.json`: 41 files (20 clean), 120 labelled issues, written by reading the code rather than from tool output. It includes a CVE-style Python corpus (`examples/benchmark_corpus/`: SQL injection, command injection, deserialization, weak crypto, TLS misuse, hardcoded secrets, plus safe look-alikes), a multi-language corpus (`examples/benchmark_multilang/`: Java, Go, PHP, C# and TypeScript, each a vulnerable file plus a safe twin using the standard fix), and the performance fixtures. The samples are hand-written reductions of well-documented vulnerability patterns (CWE-89, 78, 502, 611, 22, 79, 601, 327, hardcoded credentials), not code copied from real CVEs.
 
 ```bash
 aegisscan --benchmark --static-only                     # print the report
@@ -125,13 +125,13 @@ Measured with Bandit + built-in secret scanner + optimizer (Semgrep off, which i
 
 | Metric | Value |
 |---|---|
-| Precision | 85.7% (72 TP / 12 FP) |
-| Recall, labels in scope | 100% (66 labels) |
-| Recall, all labels | 75% (the other 22 need Semgrep or an LLM) |
-| Clean files flagged | 3 of 15 |
-| Calibration | ECE 0.138, Brier 0.106 |
+| Precision | 86.5% (77 TP / 12 FP) |
+| Recall, labels in scope | 100% (71 labels) |
+| Recall, all labels | 59% (the other 49 need Semgrep or an LLM) |
+| Clean files flagged | 3 of 20 |
+| Calibration | ECE 0.141, Brier 0.102 |
 
-Read these as a small-sample baseline, not a quality claim: the corpus is self-authored, and the false positives are mostly Bandit notes on safe code (`import subprocess`, placeholder-built `IN (?,?)` SQL, allow-listed `ORDER BY`). Semgrep and LLM numbers depend on network and API access; in the last full run Semgrep was installed but contributed no findings, so the JavaScript labels showed as missed (in-scope recall 81%). No LLM run has been recorded yet.
+Read these as a small-sample baseline, not a quality claim: the corpus is self-authored, and the false positives are mostly Bandit notes on safe code (`import subprocess`, placeholder-built `IN (?,?)` SQL, allow-listed `ORDER BY`) plus Semgrep taint rules that do not understand custom sanitisers or allow-lists (in the TypeScript safe twin). With Semgrep online (network) the last static-only run scored precision 86.1%, recall 82.0% over the 111 in-scope labels and 76.7% over all 120. Semgrep's current rule packs (python, javascript, owasp-top-ten, security-audit, nodejsscan) miss 11 of the 32 labelled issues in the Java/Go/PHP/C#/TypeScript corpus, so those languages currently depend on the LLM pass. No LLM run has been recorded yet.
 
 ---
 

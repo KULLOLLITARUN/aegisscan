@@ -141,6 +141,53 @@
     {"path": "clean_pipeline_test/config.py", "labels": []},
     {"path": "clean_pipeline_test/ingest.py", "labels": []},
     {"path": "clean_pipeline_test/run_pipeline.py", "labels": []},
-    {"path": "clean_pipeline_test/transform.py", "labels": []}
+    {"path": "clean_pipeline_test/transform.py", "labels": []},
+    {"path": "benchmark_multilang/java/UserService.java", "labels": [
+      {"lines": [16, 16], "category": "secrets", "expected_by": ["gitleaks", "llm"], "note": "hardcoded database password"},
+      {"lines": [25, 25], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "SQLi: string concatenation into Statement.executeQuery"},
+      {"lines": [29, 29], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "MD5 for password hashing"},
+      {"lines": [35, 35], "category": "deserialization", "expected_by": ["semgrep", "llm"], "note": "ObjectInputStream.readObject on untrusted stream"},
+      {"lines": [39, 39], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "Runtime.exec with concatenated host"},
+      {"lines": [43, 43], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "XXE: DocumentBuilderFactory with default (unsafe) settings"},
+      {"lines": [48, 48], "category": "path_traversal", "expected_by": ["llm"], "note": "user-controlled name joined onto base directory without normalisation"}
+    ]},
+    {"path": "benchmark_multilang/java/SafeUserService.java", "labels": []},
+    {"path": "benchmark_multilang/go/server.go", "labels": [
+      {"lines": [14, 14], "category": "secrets", "expected_by": ["gitleaks", "llm"], "note": "hardcoded live API secret"},
+      {"lines": [17, 17], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "SQLi: fmt.Sprintf into db.Query"},
+      {"lines": [21, 21], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "MD5 for password hashing"},
+      {"lines": [25, 25], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "exec.Command sh -c with concatenated host"},
+      {"lines": [31, 31], "category": "network", "expected_by": ["semgrep", "llm"], "note": "InsecureSkipVerify disables TLS verification"},
+      {"lines": [36, 36], "category": "path_traversal", "expected_by": ["llm"], "note": "filepath.Join with user-controlled file name, no containment check"}
+    ]},
+    {"path": "benchmark_multilang/go/safe_server.go", "labels": []},
+    {"path": "benchmark_multilang/php/index.php", "labels": [
+      {"lines": [2, 2], "category": "secrets", "expected_by": ["gitleaks", "llm"], "note": "hardcoded database password"},
+      {"lines": [5, 5], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "SQLi: concatenated $_GET value in mysqli query"},
+      {"lines": [7, 7], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "reflected XSS: $_GET echoed unescaped"},
+      {"lines": [9, 9], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "local file inclusion via include($_GET[...])"},
+      {"lines": [11, 11], "category": "deserialization", "expected_by": ["semgrep", "llm"], "note": "unserialize on cookie data"},
+      {"lines": [13, 13], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "md5 for password hashing"},
+      {"lines": [16, 16], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "system() with concatenated $_POST value"},
+      {"lines": [19, 19], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "eval of $_POST data"}
+    ]},
+    {"path": "benchmark_multilang/php/safe.php", "labels": []},
+    {"path": "benchmark_multilang/csharp/AccountService.cs", "labels": [
+      {"lines": [14, 14], "category": "secrets", "expected_by": ["gitleaks", "llm"], "note": "hardcoded database password in connection string"},
+      {"lines": [20, 20], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "SQLi: concatenation into SqlCommand"},
+      {"lines": [26, 26], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "MD5 for password hashing"},
+      {"lines": [31, 31], "category": "deserialization", "expected_by": ["semgrep", "llm"], "note": "BinaryFormatter.Deserialize on untrusted stream"},
+      {"lines": [36, 36], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "Process.Start cmd /c with concatenated host"},
+      {"lines": [41, 41], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "XXE: XmlUrlResolver enabled on XmlDocument"}
+    ]},
+    {"path": "benchmark_multilang/csharp/SafeAccountService.cs", "labels": []},
+    {"path": "benchmark_multilang/typescript/server.ts", "labels": [
+      {"lines": [8, 8], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "hardcoded JWT signing secret"},
+      {"lines": [11, 11], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "SQLi: template literal with req.query in pg query"},
+      {"lines": [16, 16], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "child_process.exec with concatenated req.query"},
+      {"lines": [21, 21], "category": "redirect", "expected_by": ["semgrep", "llm"], "note": "open redirect: res.redirect(req.query.next)"},
+      {"lines": [25, 25], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "reflected XSS: req.query.name concatenated into HTML"}
+    ]},
+    {"path": "benchmark_multilang/typescript/safe_server.ts", "labels": []}
   ]
 }

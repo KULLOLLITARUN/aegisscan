@@ -108,3 +108,18 @@ def test_sse_forwards_run_progress_and_no_longer_fakes_phases(tmp_path: Path, mo
     phases = [d["phase"] for d in progress]
     assert phases == ["Static analysis: Bandit", "LLM analysis: 3/9 chunks", "Complete"]
     assert [d["pct"] for d in progress] == [30, 60, 100]
+
+
+def test_make_console_safe_survives_legacy_codepage(monkeypatch) -> None:
+    import io
+    import sys
+
+    import main as cli
+
+    buf = io.BytesIO()
+    fake = io.TextIOWrapper(buf, encoding="cp1252", errors="strict")
+    monkeypatch.setattr(sys, "stdout", fake)
+    cli._make_console_safe()
+    print("non‑breaking hyphen")  # U+2011 has no cp1252 mapping; used to raise
+    fake.flush()
+    assert b"non" in buf.getvalue()

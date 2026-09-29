@@ -481,7 +481,17 @@ def _print_history(target_path: Path) -> None:
 log = logging.getLogger(__name__)
 
 
+def _make_console_safe() -> None:
+    """Findings carry arbitrary text; never let a legacy console codepage (cp1252) crash a report."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main() -> None:
+    _make_console_safe()
     parser = _build_parser()
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level))

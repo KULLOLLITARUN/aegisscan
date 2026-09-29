@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 382 passed, 4 skipped, coverage 91% (gate: 75%)._
+_Test status: 385 passed, 4 skipped, coverage 91% (last measured before the two latest fixes) (gate: 75%)._
 
 ---
 
@@ -41,7 +41,7 @@ _Test status: 382 passed, 4 skipped, coverage 91% (gate: 75%)._
 2. **Merge the branch.** `fix/server-hardening` has not been merged into `main`. Review the 4 commits (`git log main..fix/server-hardening`), then merge or open a PR.
 
 ### P1 — real gaps
-7. **Benchmark is still small and self-authored.** 88 labels / 31 files; calibration bins hold only 1-47 findings each. Remaining work: (a) run it once with a live LLM (`main.py --benchmark`, needs a key) to record JSON validity and latency per request, which have never been measured; (b) run with Semgrep online to score the JS labels; (c) add real CVE-derived samples and other languages; (d) measured precision on safe look-alikes is imperfect by design (Bandit flags `IN (?,?)` placeholder SQL and allow-listed `ORDER BY`), so don't treat the current 86% as a ceiling to game.
+7. **Benchmark is still small and self-authored.** 88 labels / 31 files; calibration bins hold only 1-47 findings each. Remaining work: (a) run it once with a live LLM (`main.py --benchmark`, needs a key) to record JSON validity and latency per request, which have never been measured; (b) done: Semgrep now scores (see environment notes); (c) add real CVE-derived samples and other languages; (d) measured precision on safe look-alikes is imperfect by design (Bandit flags `IN (?,?)` placeholder SQL and allow-listed `ORDER BY`), so don't treat the current 86% as a ceiling to game.
 8. **No type-check gate.** `ruff` is now gated in CI (see section 1) but `mypy` is not. Adding it means fixing the existing type errors first; widen the ruff rule set (UP, SIM, BLE) deliberately later.
 9. **Coverage hot spots (remaining):** `git_diff.py` (~61%), `ollama_provider.py` (~70%), `patcher.py` (~67%). `server/app.py`, `semgrep_runner.py` and `gitleaks_runner.py` are now covered (see section 1).
 11. **Node/JS assets live inside the Python package tree** (`scanner/server/ui/node_modules`). Harmless for git (ignored) but bloats the working directory; consider moving `ui/` to the repo root.
@@ -104,4 +104,6 @@ Always use the project venv. From the project root (`D:\AI_Projects\AI-Driven_Wo
 - `find`/`Glob` over the project descend into `.venv` and `scanner/server/ui/node_modules` — scope searches to `scanner`, `tests`, `examples`.
 - Files use CRLF; when scripting edits preserve line endings.
 - The project path contains `&` (`Security_&_Optimization`), so `npm run ...` fails under cmd.exe (npm reports `Cannot find module` for vite or oxlint). Call the tools through node instead: `node node_modules/vite/bin/vite.js build`, `node node_modules/oxlint/bin/oxlint`. Do not run `npm ci` here (it wipes node_modules and would hit the same problem).
-- Semgrep is installed in the venv but produced no findings in the last full `--benchmark` run (cause not investigated: registry/network, rules, or config). Because it is installed, the benchmark counts it as active, so the JS labels show as missed (in-scope recall 81% instead of 100%).
+- Semgrep zero-findings cause found and fixed: `p/owasp-top-10` no longer exists on the registry (HTTP 404, correct id `p/owasp-top-ten`), and one invalid config makes Semgrep exit 7 with no results, so all five packs were lost silently. The runner now logs Semgrep `errors` as warnings. With the fix, `--benchmark --static-only`: Semgrep 25/28 correct (89%), precision 87%, in-scope recall 88.9%, recall over all labels 83%. Remaining misses are mostly JS xss/injection labels that the p/javascript packs do not match. Watch for further registry renames (see P2 item 18).
+- Fixed: the CLI crashed printing non-cp1252 characters (e.g. U+2011 in a finding) on a default Windows console. `main._make_console_safe()` now sets `errors="replace"` on stdout/stderr at startup.
+- `main.py --benchmark` without `--static-only` makes live LLM requests (~75 per run).

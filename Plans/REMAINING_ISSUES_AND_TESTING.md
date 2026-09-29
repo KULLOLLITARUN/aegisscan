@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 215 passed, 4 skipped, coverage 82% (gate: 75%)._
+_Test status: 249 passed, 4 skipped, coverage 89% (gate: 75%)._
 
 ---
 
@@ -18,6 +18,7 @@ _Test status: 215 passed, 4 skipped, coverage 82% (gate: 75%)._
 | Prompt injection | Random per-request code fence + "untrusted data" system-prompt rules |
 | Config | `.aegisscan.toml` (`exclude_dirs`); Bandit no longer silently skips `tests/`/`examples/` |
 | Languages | Tree-sitter chunking for Go, Java, PHP, C# (plus Python/JS/TS) |
+| Coverage | `tests/test_v13_coverage.py` (34 tests, mocked): SSE stream, error/strict-privacy paths, log forwarding, sync-scan errors, Semgrep and Gitleaks runners incl. fallbacks. `semgrep_runner` 99%, `gitleaks_runner` 89% |
 | Misc | History uses `executemany`; SARIF reports real duration, placeholder URL removed; CI installs Gitleaks binary + runs tests with coverage gate; packaging limited to `scanner*` with package-data |
 
 ---
@@ -35,7 +36,7 @@ _Test status: 215 passed, 4 skipped, coverage 82% (gate: 75%)._
 6. **Optimizer heuristics are conservative and name-based.** `_DB_METHODS` (`execute`, `fetchone`, `query`, …) and `_HTTP_OWNERS` (`requests`, `httpx`, `session`, `client`) can miss ORMs (`.filter()`, `.objects.get()`) and flag non-DB `.query()` methods. Tune with real-repo runs.
 7. **Benchmark is small and self-authored.** `examples/slow_python` (8 expected issues) + `examples/tricky_clean_python` give P/R = 1.0 by construction. Plan §7 wants confidence calibration, JSON validity rate and latency per chunk measured on a larger labelled set (ideally real CVE-style samples for the security side too).
 8. **No linter / type-check gate.** `ruff`/`mypy` were not added because enabling them means cleaning up existing warnings first. Suggested: add `ruff` with a baseline config, fix, then gate in CI.
-9. **Coverage hot spots:** `scanner/server/app.py` (~49%, SSE path untested), `semgrep_runner.py` (~47%), `gitleaks_runner.py` (~55%), `git_diff.py` (~61%), `ollama_provider.py` (~70%), `patcher.py` (~67%).
+9. **Coverage hot spots (remaining):** `git_diff.py` (~61%), `ollama_provider.py` (~70%), `patcher.py` (~67%). `server/app.py`, `semgrep_runner.py` and `gitleaks_runner.py` are now covered (see section 1).
 10. **Built UI is not committed.** `dist/` is in `.gitignore`, so `scanner/server/dist` is absent in a fresh clone → run `npm ci && npm run build` in `scanner/server/ui/`. Decide: commit the build, build in CI, or document it (README currently doesn't mention the UI build).
 11. **Node/JS assets live inside the Python package tree** (`scanner/server/ui/node_modules`). Harmless for git (ignored) but bloats the working directory; consider moving `ui/` to the repo root.
 
@@ -70,6 +71,7 @@ Always use the project venv. From the project root (`D:\AI_Projects\AI-Driven_Wo
 | Server hardening | `pytest tests/test_v10_server.py` |
 | Optimizer, config, OpenAI, redaction, prompt fence | `pytest tests/test_v11_hardening.py` |
 | Languages, concurrency, optimizer P/R, Groq failover, SARIF, history batch, live providers | `pytest tests/test_v12_remaining.py` |
+| SSE path, Semgrep/Gitleaks runners | `pytest tests/test_v13_coverage.py` |
 
 ### Live-provider smoke tests (opt-in)
 `tests/test_v12_remaining.py::test_live_*` are skipped unless credentials/daemon exist:

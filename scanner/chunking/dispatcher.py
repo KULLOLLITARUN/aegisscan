@@ -17,6 +17,7 @@ import logging
 
 from scanner.chunking.base import BaseChunker
 from scanner.chunking.generic_chunker import GenericChunker
+from scanner.chunking.sql_chunker import SqlChunker
 from scanner.chunking.tree_sitter_chunker import _TS_GRAMMAR_MAP, TreeSitterChunker
 from scanner.models.file_info import FileInfo
 
@@ -25,13 +26,15 @@ log = logging.getLogger(__name__)
 # Singleton instances — chunkers are stateless so one instance per type is fine
 _tree_sitter_chunker = TreeSitterChunker()
 _generic_chunker = GenericChunker()
+_sql_chunker = SqlChunker()
 
 
 def get_chunker(file_info: FileInfo) -> BaseChunker:
     """
     Return the appropriate chunker for *file_info*.
 
-    - TreeSitterChunker for Python, JavaScript, TypeScript
+    - TreeSitterChunker for languages with a grammar (Python, JS/TS, Go, Java, PHP, C#)
+    - SqlChunker for SQL (statement-aware splitter; no grammar)
     - GenericChunker for everything else (fallback)
 
     If TreeSitterChunker fails at runtime for a supported language it returns
@@ -39,6 +42,8 @@ def get_chunker(file_info: FileInfo) -> BaseChunker:
     """
     if file_info.language in _TS_GRAMMAR_MAP:
         return _tree_sitter_chunker
+    if file_info.language == "SQL":
+        return _sql_chunker
     return _generic_chunker
 
 
@@ -56,8 +61,8 @@ def chunk_file(file_info: FileInfo) -> list:
     chunker = get_chunker(file_info)
     chunks = chunker.chunk(file_info)
 
-    # If Tree-sitter returned nothing for a supported language → fall back
-    if not chunks and chunker is _tree_sitter_chunker:
+    # If a specialised chunker returned nothing (parse failure, empty result) → fall back
+    if not chunks and chunker is not _generic_chunker:
         log.debug(
             "Tree-sitter returned no chunks for %s (%s) — using GenericChunker",
             file_info.path.name,

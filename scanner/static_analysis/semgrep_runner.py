@@ -53,7 +53,7 @@ _SEMGREP_CONFIDENCE: dict[str, float] = {
     "INFO":    0.50,
 }
 
-_SEMGREP_CONFIGS = ["p/python", "p/javascript", "p/owasp-top-10", "p/security-audit", "p/nodejsscan"]
+_SEMGREP_CONFIGS = ["p/python", "p/javascript", "p/owasp-top-ten", "p/security-audit", "p/nodejsscan"]
 
 
 def _infer_category(rule_id: str) -> str:
@@ -115,6 +115,12 @@ def run_semgrep(target: Path) -> list[Finding]:
     except json.JSONDecodeError as exc:
         log.warning("Semgrep output is not valid JSON: %s", exc)
         return []
+
+    # A single invalid config (e.g. a renamed registry pack -> HTTP 404) makes Semgrep
+    # exit 7 with zero results, which used to look identical to "nothing found".
+    for err in data.get("errors", []):
+        if err.get("level") == "error":
+            log.warning("Semgrep error (exit %d): %s", proc.returncode, str(err.get("message", ""))[:200])
 
     findings: list[Finding] = []
     for item in data.get("results", []):

@@ -386,3 +386,20 @@ def test_python_scanner_single_file_and_ignored_dirs(tmp_path: Path) -> None:
 
 def test_python_scanner_missing_target_returns_empty(tmp_path: Path) -> None:
     assert gitleaks_runner._run_python_secret_scanner(tmp_path / "gone") == []
+
+
+def test_semgrep_config_error_is_logged_not_silent(monkeypatch, tmp_path: Path, caplog) -> None:
+    # A renamed registry pack (HTTP 404) makes Semgrep exit 7 with no results; that must
+    # surface as a warning instead of looking like "no findings".
+    err = {"level": "error", "message": "Failed to download configuration from https://semgrep.dev/c/p/x HTTP 404."}
+    _patch_semgrep(monkeypatch, json.dumps({"results": [], "errors": [err]}))
+    with caplog.at_level("WARNING", logger=semgrep_runner.log.name):
+        assert semgrep_runner.run_semgrep(tmp_path) == []
+    assert "HTTP 404" in caplog.text
+
+
+def test_semgrep_configs_avoid_known_dead_packs() -> None:
+    # p/owasp-top-10 was 404 on the registry (correct id: p/owasp-top-ten) and silently
+    # zeroed every Semgrep result in the benchmark.
+    assert "p/owasp-top-10" not in semgrep_runner._SEMGREP_CONFIGS
+    assert "p/owasp-top-ten" in semgrep_runner._SEMGREP_CONFIGS

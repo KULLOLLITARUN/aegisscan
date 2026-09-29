@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 423 passed, 4 skipped, coverage 92% (gate: 75%)._
+_Test status: 428 passed, 4 skipped, coverage 92% (gate: 75%)._
 
 ---
 
@@ -50,7 +50,7 @@ _Test status: 423 passed, 4 skipped, coverage 92% (gate: 75%)._
 ### P2 — design decisions / nice to have
 12. **Multi-credential pooling** (plan V5) is not implemented. Verify Groq's ToS before adding.
 13. **Prompt-injection defence is mitigation, not proof.** No adversarial test corpus exists that exercises a real model. Add a set of injection samples and assert the model output still reports the real vulnerability.
-14. **Static-tool findings are inserted into the prompt unescaped** (`build_user_prompt` "Static Analysis Findings" section). Tool-authored text is lower risk than scanned code but is still not fenced.
+14. **Done: non-code prompt text is fenced and sanitised.** `build_user_prompt` now puts static findings inside their own random `STATIC-<hex>` fence (code fence stays first) and passes every non-code string (file name, language, symbol, static issue type / explanation / rule source) through `_one_line`: redact with the scan's privacy mode, drop control characters, collapse all whitespace to one line, truncate (120/300 chars). This closed a wider hole than the item described: a file name with newlines could start a fake `## SYSTEM` line in the prompt, and Semgrep messages can interpolate scanned code. The system prompt now declares the static list untrusted too. Tests in `tests/test_v11_hardening.py`. This is mitigation, not proof (see item 13): nothing here was run against a live model.
 15. **`--changed-only` and git features:** `get_changed_files` is now tested against a real temporary repo (modified, untracked, staged, renamed, deleted) plus mocked failure paths. Still untested: the `--changed-only` wiring in `main.py` end to end, and a repo with no commits yet (`git diff HEAD` fails there; the code skips it, so only `git status` results are used; not tested).
 16. **Line endings: done.** `.gitattributes` pins `* text=auto eol=lf` (index was already all LF; `git add --renormalize .` changed nothing), `.bat/.cmd/.ps1` stay CRLF, images are binary. Existing CRLF working-tree files (76 at the time) do not show as modified, and each one still prints a harmless "CRLF will be replaced by LF" warning when staged until it is rewritten with LF (any editor that keeps LF, or a fresh checkout). To convert them all now: commit/stash, then `git rm --cached -r . -q && git reset --hard` (destructive to uncommitted work; ask first).
 17. **Done: stale `.security-baseline.json` deleted** (still in git history). It was inert (only read with `--baseline`), held a machine-specific absolute path, and could only match on that one path (see item 19). 13 of its 14 fingerprints still matched a fresh scan, so it was not stale by content. README now describes `--save-baseline` / `--baseline` instead of naming the file.

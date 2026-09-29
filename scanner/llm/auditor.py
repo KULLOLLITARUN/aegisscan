@@ -194,7 +194,7 @@ class LLMAuditor:
         redacted_code = redact(chunk.code, mode=self._privacy_mode)
 
         # Step 2: build messages
-        user_msg = build_user_prompt(chunk, static_findings, redacted_code)
+        user_msg = build_user_prompt(chunk, static_findings, redacted_code, self._privacy_mode)
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_msg},

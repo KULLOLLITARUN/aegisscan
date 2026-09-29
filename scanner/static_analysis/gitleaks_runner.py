@@ -50,7 +50,25 @@ _SECRET_PATTERNS = [
     (r"-----BEGIN PRIVATE KEY-----", "Unencrypted RSA/PEM Private Key", Severity.CRITICAL),
     (r"(?i)(jwt_secret|secret_key|api_secret)\s*=\s*['\"][^'\"]{8,}['\"]", "Hardcoded Secret / JWT Key", Severity.HIGH),
     (r"(?i)(password|passwd|pwd)\s*[:=]\s*['\"][^'\"]{6,}['\"]", "Hardcoded Password String", Severity.MEDIUM),
+    # Password inside a connection string (.NET / JDBC / ODBC style): "...;Password=Abc123xyz;..."
+    # The lookahead skips placeholders such as {0}, %s, $var, <secret>, @param.
+    (r"(?i)\b(password|pwd)=(?![{%$<@])[^;'\"\s]{6,};", "Hardcoded Password in Connection String", Severity.MEDIUM),
+    # Positional DB credentials: mysqli("host", "user", "password", ...), mysqli_connect(...), new PDO("dsn", "user", "password")
+    (
+        r"(?i)(?:mysqli(?:_connect)?|new\s+PDO)\s*\(\s*['\"][^'\"]*['\"]\s*,\s*['\"][^'\"]*['\"]\s*,\s*['\"][^'\"]{6,}['\"]",
+        "Hardcoded Database Password (positional argument)",
+        Severity.MEDIUM,
+    ),
 ]
+
+# Extensions the fallback scanner reads. It used to cover only Python/JS/TS/config/markdown, so
+# secrets in Java, Go, PHP, C# and friends were never even opened.
+_SCAN_GLOBS = (
+    "*.py", "*.js", "*.jsx", "*.mjs", "*.cjs", "*.ts", "*.tsx",
+    "*.java", "*.kt", "*.go", "*.php", "*.cs", "*.rb", "*.rs", "*.swift", "*.c", "*.cpp", "*.h",
+    "*.sh", "*.gradle", "*.properties", "*.xml", "*.toml", "*.ini", "*.cfg", "*.conf", "*.tf",
+    "*.json", "*.env", "*.yml", "*.yaml", "*.md",
+)
 
 
 def run_gitleaks(target: Path) -> list[Finding]:
@@ -124,7 +142,7 @@ def _run_python_secret_scanner(target: Path) -> list[Finding]:
     if target.is_file():
         files_to_scan.append(target)
     elif target.is_dir():
-        for ext in ("*.py", "*.js", "*.ts", "*.json", "*.env", "*.yml", "*.yaml", "*.md"):
+        for ext in _SCAN_GLOBS:
             files_to_scan.extend(target.rglob(ext))
 
     for filepath in files_to_scan:

@@ -13,7 +13,7 @@ AegisScan operates through a 10-stage hybrid analysis pipeline:
 3. **AI Triggering & Secret Redaction**: Selective triggering rules (risky patterns, static findings, or `--deep` pass) with regex-based multi-mode secret scrubbing (`--privacy standard|redact|strict`).
 4. **Resilient LLM Provider Chain**: Multi-provider fallback chain (`Groq` cloud LLM → `Ollama` local LLM → Graceful Static Fallback) with token-bucket rate limiting and exponential backoff.
 5. **AI Fix Patch Generator**: Automatic prompt engineering for high-confidence security findings to output production-ready unified `git diff` patches (`--generate-patches`).
-6. **Intelligence Layer**: Location & category deduplication, multi-tool correlation confidence boosting, and `.security-baseline.json` suppression.
+6. **Intelligence Layer**: Location & category deduplication, multi-tool correlation confidence boosting, and baseline suppression (`--save-baseline FILE` / `--baseline FILE`).
 7. **Scoring & Reporting**: "Midnight Obsidian" dark-mode HTML reports with SVG score gauges, inline AI diff patches, JSON export, and rich CLI terminal summary.
 8. **CI/CD Integration**: Incremental Git diff scanning (`--changed-only`) and build gate enforcement (`--fail-on security:high`).
 9. **SQLite Scan History Persistence**: Automatic recording of scan results, security score trends, and score delta tracking (`aegisscan --history`).

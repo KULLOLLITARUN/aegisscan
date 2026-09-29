@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 385 passed, 4 skipped, coverage 91% (last measured before the two latest fixes) (gate: 75%)._
+_Test status: 414 passed, 4 skipped, coverage 92% (gate: 75%) (gate: 75%)._
 
 ---
 
@@ -43,14 +43,14 @@ _Test status: 385 passed, 4 skipped, coverage 91% (last measured before the two 
 ### P1 — real gaps
 7. **Benchmark is still small and self-authored.** 88 labels / 31 files; calibration bins hold only 1-47 findings each. Remaining work: (a) run it once with a live LLM (`main.py --benchmark`, needs a key) to record JSON validity and latency per request, which have never been measured; (b) done: Semgrep now scores (see environment notes); (c) add real CVE-derived samples and other languages; (d) measured precision on safe look-alikes is imperfect by design (Bandit flags `IN (?,?)` placeholder SQL and allow-listed `ORDER BY`), so don't treat the current 86% as a ceiling to game.
 8. **No type-check gate.** `ruff` is now gated in CI (see section 1) but `mypy` is not. Adding it means fixing the existing type errors first; widen the ruff rule set (UP, SIM, BLE) deliberately later.
-9. **Coverage hot spots (remaining):** `git_diff.py` (~61%), `ollama_provider.py` (~70%), `patcher.py` (~67%). `server/app.py`, `semgrep_runner.py` and `gitleaks_runner.py` are now covered (see section 1).
+9. **Coverage hot spots (remaining):** `ollama_provider.py` (~36% in isolation). Deliberately not being worked on: the project uses Groq; Ollama stays in the failover chain untouched. `git_diff.py` and `patcher.py` are now 100% (`tests/test_v19_git_diff_patcher.py`, 29 tests); `server/app.py`, `semgrep_runner.py` and `gitleaks_runner.py` were covered earlier (see section 1). Known gap found while testing: the patcher's `os.system` -> `subprocess.run` replacement is unreachable on its own (the branch needs "subprocess" in the line or issue type), so a bare `os.system(cmd)` gets the generic template. The older V8 patcher test passes a tuple as the LLM response, which raises inside the try block, so it only ever exercised the fallback.
 11. **Node/JS assets live inside the Python package tree** (`scanner/server/ui/node_modules`). Harmless for git (ignored) but bloats the working directory; consider moving `ui/` to the repo root.
 
 ### P2 — design decisions / nice to have
 12. **Multi-credential pooling** (plan V5) is not implemented. Verify Groq's ToS before adding.
 13. **Prompt-injection defence is mitigation, not proof.** No adversarial test corpus exists that exercises a real model. Add a set of injection samples and assert the model output still reports the real vulnerability.
 14. **Static-tool findings are inserted into the prompt unescaped** (`build_user_prompt` "Static Analysis Findings" section). Tool-authored text is lower risk than scanned code but is still not fenced.
-15. **`--changed-only` and git features** are only lightly tested (`git_diff.py` 61%). The folder was not a git repo until this session; test on a real repo with history.
+15. **`--changed-only` and git features:** `get_changed_files` is now tested against a real temporary repo (modified, untracked, staged, renamed, deleted) plus mocked failure paths. Still untested: the `--changed-only` wiring in `main.py` end to end, and a repo with no commits yet (`git diff HEAD` fails there; the code skips it, so only `git status` results are used; not tested).
 16. **Line endings:** files are CRLF in the working tree; git warns "LF will be replaced by CRLF". Consider adding a `.gitattributes` (`* text=auto`).
 17. **`.security-baseline.json`** at the repo root fingerprints `examples/vulnerable_python`. It is inert unless `--baseline` is passed, but it is a stale artefact; consider deleting or moving it under `examples/`.
 18. **Groq model list will rot again.** Consider fetching `client.models.list()` on first use and intersecting it with the configured list.

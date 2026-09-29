@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 416 passed, 4 skipped, coverage 92% (gate: 75%)._
+_Test status: 417 passed, 4 skipped, coverage 92% (gate: 75%)._
 
 ---
 
@@ -19,6 +19,7 @@ _Test status: 416 passed, 4 skipped, coverage 92% (gate: 75%)._
 | Config | `.aegisscan.toml` (`exclude_dirs`); Bandit no longer silently skips `tests/`/`examples/` |
 | Languages | Tree-sitter chunking for Go, Java, PHP, C# (plus Python/JS/TS) |
 | Coverage | `tests/test_v13_coverage.py` (34 tests, mocked): SSE stream, error/strict-privacy paths, log forwarding, sync-scan errors, Semgrep and Gitleaks runners incl. fallbacks. `semgrep_runner` 99%, `gitleaks_runner` 89% |
+| Type check | `mypy` added to `dev` extras, `[tool.mypy]` config and a CI step. First run found 5 errors: a real crash (`sql_chunker.split_statements` raised AttributeError on any non-ASCII letter outside strings/comments, e.g. `SELECT é FROM t`, because `str.isalpha()` is Unicode-aware but the keyword regex is ASCII-only), a wrong `TYPE_CHECKING` import in `storage/history.py` (`ScanResult` lives in `models/scan.py`), and two unchecked regex matches / a `reconfigure` typing issue. All fixed, regression test in `test_v17_sql_chunker.py` |
 | Lint | `ruff` added (`[tool.ruff]` in pyproject: E4/E7/E9, F, B, I; `examples/` and `ui/` excluded; `main.py` ignores E402/E701 by design). Baseline cleaned (unused imports, import order, f-strings, ambiguous `l`, frozen-model test now expects `ValidationError`); `manager.py` binds the provider explicitly in the retry closure. CI runs `ruff check .` before tests. Locally: `python -m ruff check .` (inside the venv) |
 | UI shipping | Decision: the build output (`scanner/server/dist`) stays uncommitted (hashed files would churn every rebuild). README now documents `npm ci && npm run build` (Node 22+) and a Windows caveat; the server prints a reminder and serves the basic fallback page when `dist/` is absent (`_ui_build_hint`); CI has a new `ui-build` job (npm ci, lint, build, upload `aegisscan-ui-dist`). The UI build and lint were verified locally by calling vite/oxlint through node (lint: 2 warnings, exit 0; build reproduces the same hashed files). The `ui-build` job itself has never run |
 | CI test bug | `test_server_dashboard_route` asserted text that only exists in the gitignored React build, so it failed on any fresh clone / CI (confirmed by running the old test with `dist/` hidden). Now hermetic; 4 more tests cover the fallback page and the reminder |
@@ -42,7 +43,7 @@ _Test status: 416 passed, 4 skipped, coverage 92% (gate: 75%)._
 
 ### P1 — real gaps
 7. **Benchmark is still small and self-authored.** 88 labels / 31 files; calibration bins hold only 1-47 findings each. Remaining work: (a) run it once with a live LLM (`main.py --benchmark`, needs a key) to record JSON validity and latency per request, which have never been measured; (b) done: Semgrep now scores (see environment notes); (c) add real CVE-derived samples and other languages; (d) measured precision on safe look-alikes is imperfect by design (Bandit flags `IN (?,?)` placeholder SQL and allow-listed `ORDER BY`), so don't treat the current 86% as a ceiling to game.
-8. **No type-check gate.** `ruff` is now gated in CI (see section 1) but `mypy` is not. Adding it means fixing the existing type errors first; widen the ruff rule set (UP, SIM, BLE) deliberately later.
+8. **Type checking is gated, but lenient.** `mypy` runs in CI (`[tool.mypy]` in `pyproject.toml`; clean on 54 source files with `ignore_missing_imports` because tree-sitter/semgrep ship no stubs) and only checks `scanner/` and `main.py`, not `tests/`. Not `--strict`: tighten deliberately later. Widen the ruff rule set (UP, SIM, BLE) deliberately later too. Not yet verified: the CI job itself (CI has never run).
 9. **Coverage hot spots (remaining):** `ollama_provider.py` (~36% in isolation). Deliberately not being worked on: the project uses Groq; Ollama stays in the failover chain untouched. `git_diff.py` and `patcher.py` are now 100% (`tests/test_v19_git_diff_patcher.py`, 29 tests); `server/app.py`, `semgrep_runner.py` and `gitleaks_runner.py` were covered earlier (see section 1). Known gap found while testing: the patcher's `os.system` -> `subprocess.run` replacement is unreachable on its own (the branch needs "subprocess" in the line or issue type), so a bare `os.system(cmd)` gets the generic template. The older V8 patcher test passes a tuple as the LLM response, which raises inside the try block, so it only ever exercised the fallback.
 11. **Node/JS assets live inside the Python package tree** (`scanner/server/ui/node_modules`). Harmless for git (ignored) but bloats the working directory; consider moving `ui/` to the repo root.
 

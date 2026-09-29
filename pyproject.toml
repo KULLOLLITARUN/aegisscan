@@ -40,6 +40,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov",
     "ruff",
+    "mypy",
 ]
 
 [tool.setuptools]
@@ -64,6 +65,13 @@ omit = ["tests/*"]
 [tool.coverage.report]
 # measured 80% at introduction; ratchet upward, never down
 fail_under = 75
+
+[tool.mypy]
+python_version = "3.11"
+files = ["scanner", "main.py"]
+exclude = ["scanner/server/ui", "scanner/server/dist"]
+# tree-sitter grammars, semgrep etc. ship without stubs
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py311"

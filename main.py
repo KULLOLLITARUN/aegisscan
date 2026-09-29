@@ -484,9 +484,12 @@ log = logging.getLogger(__name__)
 def _make_console_safe() -> None:
     """Findings carry arbitrary text; never let a legacy console codepage (cp1252) crash a report."""
     for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)   # absent on non-text streams (e.g. pytest capture)
+        if reconfigure is None:
+            continue
         try:
-            stream.reconfigure(errors="replace")
-        except (AttributeError, ValueError):
+            reconfigure(errors="replace")
+        except ValueError:
             pass
 
 

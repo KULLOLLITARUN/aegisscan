@@ -28,6 +28,15 @@ def test_last_statement_without_terminator_is_kept() -> None:
     assert _stmts("SELECT 1;\nSELECT 2") == ["SELECT 1;", "SELECT 2"]
 
 
+def test_non_ascii_identifier_does_not_crash_and_is_not_read_as_keyword() -> None:
+    # Regression: str.isalpha() is Unicode-aware but the keyword regex is ASCII-only, so a
+    # bare non-ASCII letter used to raise AttributeError (found by mypy).
+    assert _stmts("SELECT 1;\nSELECT é FROM t;\n") == ["SELECT 1;", "SELECT é FROM t;"]
+    # the tail of a non-ASCII identifier must not open a routine block ("éBEGIN" != BEGIN)
+    sql = "CREATE TABLE t (éBEGIN int);\nSELECT 2;\n"
+    assert _stmts(sql) == ["CREATE TABLE t (éBEGIN int);", "SELECT 2;"]
+
+
 def test_semicolons_inside_strings_identifiers_and_comments_do_not_split() -> None:
     sql = (
         "INSERT INTO t VALUES ('a;b', 'it''s; fine');\n"

@@ -69,7 +69,8 @@ class _Stmt:
 
 def _describe(text: str) -> tuple[str, bool]:
     """(short name, is_routine) for a statement, ignoring leading comments."""
-    body = text[_LEADING_COMMENTS.match(text).end():]
+    lead = _LEADING_COMMENTS.match(text)   # pattern is all-optional, so it always matches
+    body = text[lead.end() if lead else 0:]
     m = _ROUTINE.match(body)
     if m:
         kind = m.group("kind").upper()
@@ -173,6 +174,12 @@ def split_statements(text: str) -> list[_Stmt]:
         # block depth for routine bodies
         if ch.isalpha() or ch == "_":
             m = _WORD.match(text, i)
+            if m is None:
+                # Non-ASCII letter (isalpha() is Unicode-aware, _WORD is not). Skip the whole
+                # identifier so its tail is never mistaken for a keyword like BEGIN/END.
+                while i < n and (text[i].isalnum() or text[i] == "_"):
+                    i += 1
+                continue
             word = m.group(0).upper()
             end = m.end()
             if word == "CASE":

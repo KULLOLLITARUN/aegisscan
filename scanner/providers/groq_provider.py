@@ -12,11 +12,17 @@ unknown/retired models — Groq retires models regularly):
 3. qwen/qwen3.8-27b
 
 Override with AEGISSCAN_GROQ_MODELS (comma-separated, first is the default).
+
+Rot handling: on first use the provider asks Groq which models the key can use
+(models.list, one call) and drops configured models that are not served, warning
+if none are. A model that still 404s is remembered as retired for the life of the
+provider, so a scan does not pay for the same failure on every request.
 """
 from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 
 from scanner.providers.base import LLMProvider, LLMResponse
@@ -52,6 +58,10 @@ class GroqProvider(LLMProvider):
     def __init__(self) -> None:
         self._api_key = os.environ.get("GROQ_API_KEY", "").strip()
         self._client = None   # lazy-initialised on first use
+        self._lock = threading.Lock()               # complete() is called from worker threads
+        self._dead_models: set[str] = set()         # models Groq said do not exist for this key
+        self._served: set[str] | None = None        # ids from models.list(); None = unknown
+        self._served_checked = False
 
         if not self._api_key:
             log.warning(
@@ -79,6 +89,36 @@ class GroqProvider(LLMProvider):
             self._client = Groq(api_key=self._api_key, max_retries=0)
         return self._client
 
+    def _served_models(self, client) -> set[str] | None:
+        """Model ids Groq serves for this key (one models.list() call, cached). None if unknown."""
+        with self._lock:
+            if self._served_checked:
+                return self._served
+            self._served_checked = True
+            try:
+                self._served = {m.id for m in client.models.list().data} or None
+            except Exception as exc:  # the list is an optimisation; never let it block a scan
+                log.debug("Groq models.list() unavailable (%s) — relying on per-request failover", exc)
+                self._served = None
+            return self._served
+
+    def _candidates(self, client, model: str) -> list[str]:
+        """Configured models in failover order, minus ones known to be retired."""
+        ordered = [model] + [m for m in _configured_models() if m != model]
+        with self._lock:
+            live = [m for m in ordered if m not in self._dead_models]
+        served = self._served_models(client)
+        if served:
+            in_service = [m for m in live if m in served]
+            if in_service:
+                return in_service
+            log.warning(
+                "None of the configured Groq models (%s) are served for this key. Trying them anyway; "
+                "set AEGISSCAN_GROQ_MODELS to one of: %s",
+                ", ".join(ordered), ", ".join(sorted(served)[:8]),
+            )
+        return live or ordered   # everything marked retired: retry rather than give up silently
+
     def complete(
         self,
         messages: list[dict],
@@ -90,9 +130,8 @@ class GroqProvider(LLMProvider):
         if not self.is_available:
             return LLMResponse(content="", model=model, provider=self.name)
 
-        models_to_try = [model] + [m for m in _configured_models() if m != model]
-
         client = self._get_client()
+        models_to_try = self._candidates(client, model)
 
         for current_model in models_to_try:
             try:
@@ -118,6 +157,8 @@ class GroqProvider(LLMProvider):
                     time.sleep(0.2)
                     continue
                 elif _is_model_unavailable(exc_str):
+                    with self._lock:
+                        self._dead_models.add(current_model)   # do not pay for this 404 on every request
                     log.warning("Groq model %s unavailable for this key — trying next model...", current_model)
                     continue
                 else:

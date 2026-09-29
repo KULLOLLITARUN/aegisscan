@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from pathlib import Path
 
 from scanner.models.finding import Finding
 
@@ -44,16 +45,34 @@ _SOURCE_PRIORITY: dict[str, int] = {
 }
 
 
-def fingerprint(finding: Finding) -> str:
+def _fingerprint_path(file_path: Path, root: Path | None) -> str:
+    """Path component of a fingerprint.
+
+    With *root* (the scan target) the path is made relative and slash-normalised, so the same
+    finding fingerprints identically on Windows/Linux and in any checkout directory. Without
+    *root* it is the path exactly as scanned (legacy, machine-specific). A path outside *root*
+    cannot be made relative and falls back to its slash-normalised form.
+    """
+    if root is None:
+        return str(file_path)
+    try:
+        return Path(file_path).resolve().relative_to(Path(root).resolve()).as_posix()
+    except (ValueError, OSError):
+        return Path(file_path).as_posix()
+
+
+def fingerprint(finding: Finding, root: Path | None = None) -> str:
     """
     Stable 16-char hex identifier for a finding — same across scan runs.
 
     Used by the baseline suppression system to suppress already-known issues.
     The fingerprint is intentionally coarser than the UUID (which changes every
     run) to allow minor line-number drift while still matching the same issue.
+
+    Pass the scan target as *root* to get a portable fingerprint (see _fingerprint_path).
     """
     key = (
-        f"{finding.file_path}:"
+        f"{_fingerprint_path(finding.file_path, root)}:"
         f"{finding.line_start // PROXIMITY_LINES}:"   # tolerates small line shifts
         f"{finding.issue_type.lower().replace(' ', '_')}:"
         f"{finding.category}:"

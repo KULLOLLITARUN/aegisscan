@@ -12,6 +12,7 @@ Workflow:
 Baseline format (JSON):
   {
     "aegisscan_version": "V3",
+    "fingerprint_version": 2,
     "created_at": "2026-08-09T...",
     "target_path": "/absolute/path",
     "fingerprint_count": 17,
@@ -33,6 +34,8 @@ from scanner.models.finding import Finding
 log = logging.getLogger(__name__)
 
 _AEGISSCAN_VERSION = "V3"
+# 1 = path exactly as scanned (machine-specific, files without the field); 2 = path relative to the scan target
+_FINGERPRINT_VERSION = 2
 
 
 class BaselineManager:
@@ -51,6 +54,12 @@ class BaselineManager:
             data = json.loads(path.read_text(encoding="utf-8"))
             fps = data.get("fingerprints", [])
             self._fingerprints = set(fps)
+            if data.get("fingerprint_version", 1) < _FINGERPRINT_VERSION:
+                log.warning(
+                    "Baseline %s is in the legacy format (absolute paths): it only matches on the "
+                    "machine and directory that created it. Re-create it with --save-baseline for a "
+                    "portable one.", path,
+                )
             log.info("Baseline loaded: %d suppressed fingerprints from %s", len(fps), path)
         except (json.JSONDecodeError, OSError) as exc:
             log.warning("Failed to load baseline %s: %s — proceeding without suppression", path, exc)
@@ -59,16 +68,26 @@ class BaselineManager:
     def is_active(self) -> bool:
         return bool(self._fingerprints)
 
-    def suppress(self, findings: list[Finding]) -> tuple[list[Finding], int]:
+    def _is_known(self, finding: Finding, root: Path | None) -> bool:
+        if root is not None and fingerprint(finding, root) in self._fingerprints:
+            return True
+        # Legacy baselines (no fingerprint_version) hashed the path exactly as scanned, so they
+        # only match on the machine and directory that created them. Still honour that.
+        return fingerprint(finding) in self._fingerprints
+
+    def suppress(self, findings: list[Finding], root: Path | None = None) -> tuple[list[Finding], int]:
         """
         Remove findings whose fingerprint is in the baseline.
+
+        *root* is the scan target; with it, fingerprints are path-relative and match across
+        machines and checkout directories.
 
         Returns (surviving_findings, n_suppressed).
         """
         if not self._fingerprints:
             return findings, 0
 
-        kept = [f for f in findings if fingerprint(f) not in self._fingerprints]
+        kept = [f for f in findings if not self._is_known(f, root)]
         n_suppressed = len(findings) - len(kept)
 
         if n_suppressed:
@@ -86,9 +105,10 @@ def save_baseline(findings: list[Finding], target_path: Path, output_path: Path)
         target_path : The scanned directory (for provenance).
         output_path : Where to write the baseline JSON file.
     """
-    fps = [fingerprint(f) for f in findings]
+    fps = [fingerprint(f, target_path) for f in findings]
     data = {
         "aegisscan_version": _AEGISSCAN_VERSION,
+        "fingerprint_version": _FINGERPRINT_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "target_path": str(target_path.resolve()),
         "fingerprint_count": len(fps),

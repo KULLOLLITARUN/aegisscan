@@ -271,6 +271,73 @@ def test_save_baseline_writes_valid_json(tmp_path: Path) -> None:
     assert data["aegisscan_version"] == "V3"
 
 
+def _at(root: Path, rel: str = "src/app.py", **kw) -> Finding:
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("x = 1\n")
+    return _finding(path=str(p), **kw)
+
+
+def test_baseline_is_portable_across_checkout_directories(tmp_path: Path) -> None:
+    # Regression: fingerprints used to hash the absolute path, so a baseline only matched in
+    # the exact directory that created it (useless for CI on another machine).
+    a, b = tmp_path / "checkout_a", tmp_path / "elsewhere" / "checkout_b"
+    fa, fb = _at(a), _at(b)
+    baseline_file = tmp_path / "baseline.json"
+    save_baseline([fa], a, baseline_file)
+
+    remaining, n = BaselineManager(baseline_file).suppress([fb], b)
+
+    assert n == 1
+    assert remaining == []
+
+
+def test_portable_baseline_still_reports_a_different_file(tmp_path: Path) -> None:
+    a, b = tmp_path / "a", tmp_path / "b"
+    baseline_file = tmp_path / "baseline.json"
+    save_baseline([_at(a, "src/app.py")], a, baseline_file)
+
+    other = _at(b, "src/other.py")
+    remaining, n = BaselineManager(baseline_file).suppress([other], b)
+
+    assert n == 0
+    assert remaining == [other]
+
+
+def test_fingerprint_relative_path_ignores_slash_style_and_root(tmp_path: Path) -> None:
+    f = _at(tmp_path / "r1")
+    g = _at(tmp_path / "r2")
+    assert fingerprint(f, tmp_path / "r1") == fingerprint(g, tmp_path / "r2")
+    assert fingerprint(f, tmp_path / "r1") != fingerprint(f)           # differs from the legacy form
+    assert fingerprint(f) != fingerprint(g)                            # legacy form is path-dependent
+
+
+def test_fingerprint_outside_root_falls_back_without_crashing(tmp_path: Path) -> None:
+    f = _at(tmp_path / "elsewhere")
+    fp = fingerprint(f, tmp_path / "unrelated_root")
+    assert len(fp) == 16
+
+
+def test_legacy_baseline_still_suppresses_on_same_path_and_warns(tmp_path: Path, caplog) -> None:
+    f = _at(tmp_path / "proj")
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(json.dumps({"aegisscan_version": "V3", "fingerprints": [fingerprint(f)]}))
+
+    with caplog.at_level("WARNING"):
+        manager = BaselineManager(legacy)
+    remaining, n = manager.suppress([f], tmp_path / "proj")
+
+    assert "legacy format" in caplog.text
+    assert n == 1
+    assert remaining == []
+
+
+def test_save_baseline_records_fingerprint_version(tmp_path: Path) -> None:
+    out = tmp_path / "baseline.json"
+    save_baseline([_at(tmp_path)], tmp_path, out)
+    assert json.loads(out.read_text())["fingerprint_version"] == 2
+
+
 def test_save_baseline_fingerprints_are_strings(tmp_path: Path) -> None:
     f = _finding()
     out = tmp_path / "baseline.json"

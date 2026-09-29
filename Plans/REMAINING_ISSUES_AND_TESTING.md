@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 417 passed, 4 skipped, coverage 92% (gate: 75%)._
+_Test status: 423 passed, 4 skipped, coverage 92% (gate: 75%)._
 
 ---
 
@@ -55,7 +55,7 @@ _Test status: 417 passed, 4 skipped, coverage 92% (gate: 75%)._
 16. **Line endings: done.** `.gitattributes` pins `* text=auto eol=lf` (index was already all LF; `git add --renormalize .` changed nothing), `.bat/.cmd/.ps1` stay CRLF, images are binary. Existing CRLF working-tree files (76 at the time) do not show as modified, and each one still prints a harmless "CRLF will be replaced by LF" warning when staged until it is rewritten with LF (any editor that keeps LF, or a fresh checkout). To convert them all now: commit/stash, then `git rm --cached -r . -q && git reset --hard` (destructive to uncommitted work; ask first).
 17. **Done: stale `.security-baseline.json` deleted** (still in git history). It was inert (only read with `--baseline`), held a machine-specific absolute path, and could only match on that one path (see item 19). 13 of its 14 fingerprints still matched a fresh scan, so it was not stale by content. README now describes `--save-baseline` / `--baseline` instead of naming the file.
 18. **Groq model list will rot again.** Consider fetching `client.models.list()` on first use and intersecting it with the configured list. The same rot hit Semgrep: a renamed registry pack silently zeroed all Semgrep results (now logged, see section 1).
-19. **Baselines are not portable.** `deduplicator.fingerprint()` hashes `finding.file_path` exactly as scanned, so a baseline only matches on the same absolute path. A baseline saved on Windows (or in another checkout dir) suppresses nothing in Linux CI, which defeats the main use case (fail CI only on new findings). Fix: hash the path relative to the scan target, and store that in the baseline. This changes every fingerprint, so existing baselines stop matching; bump the baseline format version and say so. Needs a test that saves a baseline in one directory and applies it from a copy in another.
+19. **Done: baselines are portable.** `fingerprint(finding, root)` now hashes the path relative to the scan target (slash-normalised), so a baseline saved in one checkout directory or OS matches in another. New baselines carry `fingerprint_version: 2`. Legacy baselines (no version field) still suppress on the machine and path that made them (the matcher accepts either form) and log a warning telling the user to re-create them; nothing breaks. Verified end to end: `--save-baseline` on one copy of `examples/vulnerable_python` (23 findings) then `--baseline` on a copy in a different directory suppressed all 23 (23 without it). Tests in `tests/test_intelligence.py`. Not tested: a baseline made on Windows applied on Linux (only different directories on one OS; path normalisation uses `as_posix`). A finding outside the scan root falls back to its own slash-normalised path.
 
 ---
 

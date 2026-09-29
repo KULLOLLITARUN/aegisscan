@@ -395,7 +395,7 @@ def run(
 
     # ---- 8. Baseline suppression ----
     baseline = BaselineManager(baseline_path)
-    final_findings, n_suppressed = baseline.suppress(correlated)
+    final_findings, n_suppressed = baseline.suppress(correlated, path)
 
     # ---- 9. Scoring (V4) ----
     sec_sc = security_score(final_findings)

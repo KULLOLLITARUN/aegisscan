@@ -13,14 +13,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from scanner.chunking.dispatcher import chunk_file, get_chunker, _tree_sitter_chunker, _generic_chunker
+from scanner.chunking.dispatcher import _tree_sitter_chunker, chunk_file
 from scanner.chunking.generic_chunker import WINDOW_SIZE, GenericChunker
 from scanner.chunking.tree_sitter_chunker import _TS_GRAMMAR_MAP
 from scanner.models.chunk import CodeChunk
 from scanner.models.file_info import FileInfo
-
 
 # ---------------------------------------------------------------------------
 # Helpers

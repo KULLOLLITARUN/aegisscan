@@ -139,7 +139,6 @@ def _run_python_secret_scanner(target: Path) -> list[Finding]:
             for pattern, issue_type, severity in _SECRET_PATTERNS:
                 match = re.search(pattern, line)
                 if match:
-                    matched_text = match.group(0)
                     findings.append(
                         Finding(
                             file_path=filepath,

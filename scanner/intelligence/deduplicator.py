@@ -21,9 +21,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from pathlib import Path
 
-from scanner.models.finding import Finding, Severity
+from scanner.models.finding import Finding
 
 log = logging.getLogger(__name__)
 

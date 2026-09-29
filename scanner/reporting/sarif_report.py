@@ -15,7 +15,6 @@ from typing import Any
 from scanner.models.finding import Finding, Severity
 from scanner.models.scan import ScanResult
 
-
 _SARIF_LEVEL: dict[str, str] = {
     Severity.CRITICAL.value: "error",
     Severity.HIGH.value:     "error",

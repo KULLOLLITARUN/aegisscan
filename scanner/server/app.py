@@ -22,6 +22,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 log = logging.getLogger(__name__)
@@ -315,9 +316,9 @@ def run_server(port: int = 8000) -> None:
     server_address = ("127.0.0.1", port)
     httpd = HTTPServer(server_address, AegisScanRequestHandler)
     print(f"\n{'='*62}")
-    print(f"  AEGISSCAN COMMAND CENTER")
+    print("  AEGISSCAN COMMAND CENTER")
     print(f"  -> http://localhost:{port}")
-    print(f"  Press Ctrl+C to stop.")
+    print("  Press Ctrl+C to stop.")
     print(f"{'='*62}\n")
     try:
         httpd.serve_forever()

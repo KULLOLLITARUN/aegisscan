@@ -17,7 +17,7 @@ import logging
 
 from scanner.chunking.base import BaseChunker
 from scanner.chunking.generic_chunker import GenericChunker
-from scanner.chunking.tree_sitter_chunker import TreeSitterChunker, _TS_GRAMMAR_MAP
+from scanner.chunking.tree_sitter_chunker import _TS_GRAMMAR_MAP, TreeSitterChunker
 from scanner.models.file_info import FileInfo
 
 log = logging.getLogger(__name__)
@@ -49,7 +49,6 @@ def chunk_file(file_info: FileInfo) -> list:
 
     Always returns list[CodeChunk].
     """
-    from scanner.models.chunk import CodeChunk  # noqa: PLC0415
 
     if file_info.is_binary or file_info.is_oversized or file_info.is_generated:
         return []

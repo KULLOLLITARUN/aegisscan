@@ -8,9 +8,9 @@ import main
 from scanner.llm.auditor import LLMAuditor
 from scanner.providers.manager import ProviderManager
 from scanner.static_analysis import runner
-from tests.test_v12_remaining import _Echo, _chunk
-from tests.test_v13_coverage import _events, _fake_result
 from tests.test_v10_server import _create_mock_request_handler
+from tests.test_v12_remaining import _chunk, _Echo
+from tests.test_v13_coverage import _events, _fake_result
 
 
 def _fast_tools(monkeypatch) -> None:

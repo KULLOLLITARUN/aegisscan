@@ -14,14 +14,13 @@ Covers:
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
 
-from scanner.llm.auditor import LLMAuditor, SUPPRESSION_THRESHOLD
+from scanner.llm.auditor import LLMAuditor
 from scanner.llm.redactor import redact
 from scanner.llm.schemas import LLMFindingDraft, LLMResponseSchema
 from scanner.llm.trigger import TriggerEngine
@@ -29,7 +28,6 @@ from scanner.models.chunk import CodeChunk
 from scanner.models.finding import Finding, Severity
 from scanner.providers.base import LLMResponse
 from scanner.providers.manager import ProviderManager
-
 
 # ---------------------------------------------------------------------------
 # Helpers

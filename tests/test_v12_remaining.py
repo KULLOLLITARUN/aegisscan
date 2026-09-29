@@ -206,6 +206,7 @@ def _finding(i: int = 1) -> Finding:
 
 def test_sarif_report_structure_and_duration(tmp_path: Path) -> None:
     import json
+
     from scanner.models.scan import ScanResult
     from scanner.reporting.sarif_report import generate_sarif
 
@@ -222,6 +223,7 @@ def test_sarif_report_structure_and_duration(tmp_path: Path) -> None:
 
 def test_history_records_many_findings_in_one_batch(tmp_path: Path) -> None:
     import sqlite3
+
     from scanner.models.scan import ScanResult
     from scanner.storage.history import ScanHistoryDB
 

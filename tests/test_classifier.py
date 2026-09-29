@@ -15,10 +15,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from scanner.ingestion.classifier import MAX_FILE_SIZE_BYTES, FileClassifier
 from scanner.models.file_info import FileInfo
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -271,5 +271,5 @@ def test_file_info_is_frozen(tmp_path: Path) -> None:
     """FileInfo should be immutable (frozen Pydantic model)."""
     _write(tmp_path / "main.py")
     fi = FileClassifier().classify(tmp_path / "main.py")
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         fi.language = "changed"  # type: ignore[misc]

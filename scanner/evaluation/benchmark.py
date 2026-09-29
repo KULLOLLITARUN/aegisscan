@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from main import run
-from scanner.models.scan import ScanResult
 
 log = logging.getLogger(__name__)
 

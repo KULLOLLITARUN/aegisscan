@@ -11,9 +11,9 @@ from __future__ import annotations
 import json
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
-from unittest.mock import MagicMock
 
 from main import _build_parser
 from scanner.server.app import AegisScanRequestHandler

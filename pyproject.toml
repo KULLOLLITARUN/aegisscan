@@ -39,6 +39,7 @@ static = [
 dev = [
     "pytest>=8.0",
     "pytest-cov",
+    "ruff",
 ]
 
 [tool.setuptools]
@@ -63,3 +64,18 @@ omit = ["tests/*"]
 [tool.coverage.report]
 # measured 80% at introduction; ratchet upward, never down
 fail_under = 75
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["examples", "scanner/server/ui", "scanner/server/dist"]
+
+[tool.ruff.lint]
+# Conservative baseline: real bugs and hygiene only. Widen deliberately, never by accident.
+select = ["E4", "E7", "E9", "F", "B", "I"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "E402"]
+# main.py must load .env before importing scanner modules, and uses compact one-line branches
+"main.py" = ["E402", "E701"]

@@ -28,18 +28,19 @@ from pathlib import Path
 
 # Load .env before any env-var reads (GROQ_API_KEY, etc.)
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from scanner.chunking.dispatcher import chunk_file
+from scanner.ci.ci_gate import evaluate_ci_gate
 from scanner.ingestion.classifier import FileClassifier
 from scanner.ingestion.crawler import WorkspaceCrawler
+from scanner.ingestion.git_diff import get_changed_files
 from scanner.intelligence.baseline import BaselineManager, save_baseline
 from scanner.intelligence.correlator import CorrelationGroup, correlate
 from scanner.intelligence.deduplicator import deduplicate
-from scanner.llm.auditor import LLMAuditor, SUPPRESSION_THRESHOLD
+from scanner.llm.auditor import SUPPRESSION_THRESHOLD, LLMAuditor
 from scanner.models.file_info import FileInfo
-from scanner.ci.ci_gate import evaluate_ci_gate
-from scanner.ingestion.git_diff import get_changed_files
 from scanner.models.finding import Finding, Severity
 from scanner.models.scan import ScanResult
 from scanner.providers.manager import ProviderManager

@@ -22,7 +22,6 @@ import os
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -229,8 +228,8 @@ class LLMAuditor:
             if text.startswith("```"):
                 lines = text.splitlines()
                 text = "\n".join(
-                    l for l in lines
-                    if not l.strip().startswith("```")
+                    ln for ln in lines
+                    if not ln.strip().startswith("```")
                 )
             try:
                 data = json.loads(text)

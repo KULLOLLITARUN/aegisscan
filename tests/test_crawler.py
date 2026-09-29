@@ -11,7 +11,6 @@ Covers (per plan §4 V0):
 """
 from __future__ import annotations
 
-import os
 import stat
 import sys
 from pathlib import Path
@@ -19,7 +18,6 @@ from pathlib import Path
 import pytest
 
 from scanner.ingestion.crawler import ALWAYS_IGNORED_DIRS, WorkspaceCrawler
-
 
 # ---------------------------------------------------------------------------
 # Helpers

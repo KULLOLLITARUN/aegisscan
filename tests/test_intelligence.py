@@ -25,8 +25,6 @@ import pytest
 
 from scanner.intelligence.baseline import BaselineManager, save_baseline
 from scanner.intelligence.correlator import (
-    CORROBORATION_BOOST,
-    CorrelationGroup,
     correlate,
 )
 from scanner.intelligence.deduplicator import (
@@ -35,7 +33,6 @@ from scanner.intelligence.deduplicator import (
     fingerprint,
 )
 from scanner.models.finding import Finding, Severity
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -89,7 +86,7 @@ def test_fingerprint_differs_by_issue_type() -> None:
 def test_fingerprint_tolerates_small_line_drift() -> None:
     """Findings at line 10 and line 14 (within PROXIMITY_LINES window) → same fingerprint."""
     f1 = _finding(line_start=10)
-    f2 = _finding(line_start=10 + PROXIMITY_LINES - 1)  # same window bucket
+    _f2 = _finding(line_start=10 + PROXIMITY_LINES - 1)  # same window bucket
     # They may or may not share a fingerprint depending on bucket calculation
     # Just assert it's a 16-char hex string (format correctness)
     fp = fingerprint(f1)

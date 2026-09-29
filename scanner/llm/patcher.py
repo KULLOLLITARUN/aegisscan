@@ -37,11 +37,11 @@ def _generate_fallback_patch(finding: Finding) -> str:
     if "subprocess" in first_line or "subprocess" in finding.issue_type.lower():
         fixed_line = first_line.replace("shell=True", "shell=False").replace("os.system", "subprocess.run")
         if "shell=True" not in first_line and "os.system" not in first_line:
-            fixed_line = f"# Security remediated: validate input arguments\nimport shlex\nsubprocess.run(shlex.split(command), check=True)"
+            fixed_line = "# Security remediated: validate input arguments\nimport shlex\nsubprocess.run(shlex.split(command), check=True)"
     elif "eval(" in first_line or "exec(" in first_line:
         fixed_line = first_line.replace("eval(", "ast.literal_eval(").replace("exec(", "# exec disabled\n# ")
     elif "password" in first_line.lower() or "secret" in first_line.lower() or "key" in first_line.lower():
-        fixed_line = f"# Refactored: Load sensitive credential from environment\nimport os\nSECRET_KEY = os.environ.get('APP_SECRET_KEY')"
+        fixed_line = "# Refactored: Load sensitive credential from environment\nimport os\nSECRET_KEY = os.environ.get('APP_SECRET_KEY')"
     elif "pickle" in first_line:
         fixed_line = first_line.replace("pickle.loads", "json.loads")
     else:

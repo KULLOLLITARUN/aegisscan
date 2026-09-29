@@ -31,6 +31,9 @@ jobs:
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks
           gitleaks version
 
+      - name: Lint (ruff)
+        run: ruff check .
+
       - name: Run tests
         run: python -m pytest -q --cov=scanner --cov-report=term-missing --cov-fail-under=75
 

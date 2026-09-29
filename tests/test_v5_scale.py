@@ -19,7 +19,6 @@ from scanner.providers.manager import ProviderManager
 from scanner.providers.ollama_provider import OllamaProvider
 from scanner.providers.rate_limiter import RateLimiter, execute_with_backoff
 
-
 # ---------------------------------------------------------------------------
 # RateLimiter & Backoff
 # ---------------------------------------------------------------------------

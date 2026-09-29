@@ -99,7 +99,7 @@ class ProviderManager:
             t0 = time.monotonic()
 
             try:
-                def _do_call() -> LLMResponse:
+                def _do_call(provider=provider) -> LLMResponse:
                     return provider.complete(
                         messages=messages,
                         # An explicit model applies to every provider; otherwise each

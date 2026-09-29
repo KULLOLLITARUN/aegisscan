@@ -12,6 +12,7 @@ Design rules (plan §2):
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from scanner.config import load_config
@@ -24,7 +25,10 @@ from scanner.static_analysis.semgrep_runner import run_semgrep
 log = logging.getLogger(__name__)
 
 
-def run_all_tools(target: Path) -> tuple[list[Finding], list[str]]:
+def run_all_tools(
+    target: Path,
+    progress: Callable[[str], None] | None = None,
+) -> tuple[list[Finding], list[str]]:
     """
     Run all configured static analysis tools against *target*.
 
@@ -36,8 +40,13 @@ def run_all_tools(target: Path) -> tuple[list[Finding], list[str]]:
     all_findings: list[Finding] = []
     tools_run: list[str] = []
 
+    def _step(name: str) -> None:
+        if progress:
+            progress(name)
+
     # --- Bandit (Python SAST, always available via pip) ---
     config = load_config(target)
+    _step("Bandit")
     bandit_findings = run_bandit(target, config.exclude_dirs)
     if bandit_findings:
         all_findings.extend(bandit_findings)
@@ -46,6 +55,7 @@ def run_all_tools(target: Path) -> tuple[list[Finding], list[str]]:
         log.debug("Bandit: no findings or not available")
 
     # --- Semgrep (optional CLI) ---
+    _step("Semgrep")
     semgrep_findings = run_semgrep(target)
     if semgrep_findings:
         all_findings.extend(semgrep_findings)
@@ -54,6 +64,7 @@ def run_all_tools(target: Path) -> tuple[list[Finding], list[str]]:
         log.debug("Semgrep: no findings or not available")
 
     # --- Gitleaks (optional CLI) ---
+    _step("Gitleaks")
     gitleaks_findings = run_gitleaks(target)
     if gitleaks_findings:
         all_findings.extend(gitleaks_findings)
@@ -62,6 +73,7 @@ def run_all_tools(target: Path) -> tuple[list[Finding], list[str]]:
         log.debug("Gitleaks: no findings or not available")
 
     # --- Optimizer (pure-Python AST checks, always available) ---
+    _step("Optimizer")
     opt_findings = run_optimizer(target, set(config.exclude_dirs))
     if opt_findings:
         all_findings.extend(opt_findings)

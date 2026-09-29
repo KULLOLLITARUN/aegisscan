@@ -19,6 +19,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -103,6 +105,7 @@ class LLMAuditor:
         chunks: list[CodeChunk],
         static_findings: list[Finding],
         deep: bool = False,
+        progress: Callable[[int, int], None] | None = None,
     ) -> list[Finding]:
         """
         Run the LLM over triggered chunks and return new/enriched findings.
@@ -123,6 +126,21 @@ class LLMAuditor:
         triggered = len(work)
         skipped = len(chunks) - triggered
 
+        done = 0
+        done_lock = threading.Lock()
+
+        def _tick() -> None:
+            nonlocal done
+            if progress is None:
+                return
+            with done_lock:
+                done += 1
+                current = done
+            try:
+                progress(current, triggered)
+            except Exception:  # a UI callback must never break the scan
+                log.debug("progress callback failed", exc_info=True)
+
         def _process(item: tuple[CodeChunk, list[Finding]]) -> tuple[list[Finding], int]:
             chunk, chunk_static = item
             findings = self._analyze_one(chunk, chunk_static)
@@ -132,6 +150,7 @@ class LLMAuditor:
                 for f in kept:
                     if f.severity in (Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM):
                         f.fix_patch = generate_patch_for_finding(f, self._manager)
+            _tick()
             return kept, len(findings) - len(kept)
 
         # Chunks are independent, so overlap the network waits. Pacing is still

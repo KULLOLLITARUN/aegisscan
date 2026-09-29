@@ -226,22 +226,16 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                 return
 
             from main import run
-            from scanner.ingestion.crawler import WorkspaceCrawler
 
-            # Phase 1 — crawl
-            sse("progress", {"phase": "Crawling workspace...", "file": "", "pct": 5, "found": 0})
-            time.sleep(0.1)
+            def on_progress(phase: str, pct: int, detail: str = "") -> None:
+                sse("progress", {
+                    "phase": f"{phase}: {detail}" if detail else phase,
+                    "file": "",
+                    "pct": pct,
+                    "found": 0,
+                })
 
-            crawl_result = WorkspaceCrawler(target_path).crawl()
-            files = crawl_result.discovered
-            total = len(files)
-
-            sse("progress", {"phase": f"Discovered {total} files", "file": "", "pct": 15, "found": 0})
-            time.sleep(0.1)
-
-            sse("progress", {"phase": f"Analysing {total} files (static analysis, LLM, scoring)...", "file": "", "pct": 30, "found": 0})
-
-            # Final scan run — attach a temporary handler so provider/tool log
+            # Scan run — attach a temporary handler so provider/tool log
             # activity (rate limits, failovers, static-tool errors) streams to
             # the browser live instead of only reaching this process's stdout.
             root_logger = logging.getLogger()
@@ -257,6 +251,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                     deep=deep,
                     generate_patches=generate_patches,
                     privacy=privacy,
+                    progress=on_progress,
                 )
             finally:
                 root_logger.removeHandler(log_handler)

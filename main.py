@@ -23,6 +23,7 @@ import logging
 import sys
 import time
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
 # Load .env before any env-var reads (GROQ_API_KEY, etc.)
@@ -275,12 +276,24 @@ def run(
     changed_only: bool = False,
     privacy: str = "standard",
     generate_patches: bool = False,
+    progress: Callable[[str, int, str], None] | None = None,
 ) -> tuple[ScanResult, list[FileInfo], list[CorrelationGroup]]:
     """
     V6/V8 pipeline:
       crawl → [git diff filter] → classify → chunk → static → LLM (privacy, patches)
             → deduplicate → correlate → baseline suppress → scoring → ScanResult
+
+    *progress*, if given, is called as ``progress(phase, pct, detail)`` at each
+    pipeline phase (pct is 0-100). Exceptions it raises are swallowed.
     """
+    def _progress(phase: str, pct: int, detail: str = "") -> None:
+        if progress is None:
+            return
+        try:
+            progress(phase, pct, detail)
+        except Exception:
+            log.debug("progress callback failed", exc_info=True)
+
     if not path.exists():
         print(f"ERROR: path does not exist: {path}", file=sys.stderr)
         sys.exit(1)
@@ -291,8 +304,10 @@ def run(
     t0 = time.monotonic()
 
     # ---- 1. Crawl ----
+    _progress("Crawling workspace", 5)
     crawl = WorkspaceCrawler(path).crawl()
     discovered_files = crawl.discovered
+    _progress("Discovered files", 10, f"{len(discovered_files)} files")
 
     # Incremental scan filter (V6)
     if changed_only:
@@ -317,13 +332,18 @@ def run(
             lang_counter[fi.language] += 1
 
     # ---- 3. Chunk ----
+    _progress("Chunking files", 15)
     all_chunks = []
     for fi in all_files:
         if not fi.is_binary and not fi.is_oversized and not fi.is_generated:
             all_chunks.extend(chunk_file(fi))
 
     # ---- 4. Static analysis ----
-    static_findings, tools_run = run_all_tools(path.resolve())
+    _progress("Static analysis", 25)
+    static_findings, tools_run = run_all_tools(
+        path.resolve(),
+        progress=lambda tool: _progress("Static analysis", 30, tool),
+    )
 
     # ---- 5. LLM reasoning ----
     llm_findings: list[Finding] = []
@@ -343,7 +363,11 @@ def run(
             ]
             llm_chunks_analyzed = len(triggered)
             auditor = LLMAuditor(pm, privacy_mode=privacy, generate_patches=generate_patches)
-            llm_findings = auditor.analyze_chunks(all_chunks, static_findings, deep=deep)
+            _progress("LLM analysis", 50, f"0/{llm_chunks_analyzed} chunks")
+            llm_findings = auditor.analyze_chunks(
+                all_chunks, static_findings, deep=deep,
+                progress=lambda d, t: _progress("LLM analysis", 50 + int(35 * d / max(t, 1)), f"{d}/{t} chunks"),
+            )
             llm_provider = pm.active_provider
             llm_model = pm.default_model
 
@@ -356,6 +380,7 @@ def run(
     all_raw_findings = static_findings + llm_findings
 
     # ---- 6. Deduplicate ----
+    _progress("Deduplicating and scoring", 90)
     deduped, n_deduped = deduplicate(all_raw_findings)
 
     # ---- 7. Correlate ----

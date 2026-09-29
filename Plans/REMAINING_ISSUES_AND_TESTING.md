@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 249 passed, 4 skipped, coverage 89% (gate: 75%)._
+_Test status: 256 passed, 4 skipped, coverage 89% (gate: 75%)._
 
 ---
 
@@ -19,6 +19,7 @@ _Test status: 249 passed, 4 skipped, coverage 89% (gate: 75%)._
 | Config | `.aegisscan.toml` (`exclude_dirs`); Bandit no longer silently skips `tests/`/`examples/` |
 | Languages | Tree-sitter chunking for Go, Java, PHP, C# (plus Python/JS/TS) |
 | Coverage | `tests/test_v13_coverage.py` (34 tests, mocked): SSE stream, error/strict-privacy paths, log forwarding, sync-scan errors, Semgrep and Gitleaks runners incl. fallbacks. `semgrep_runner` 99%, `gitleaks_runner` 89% |
+| Progress | `main.run(progress=cb)` calls `cb(phase, pct, detail)` per phase; static tools and each LLM chunk report too (`run_all_tools(progress=)`, `analyze_chunks(progress=)`). SSE forwards them; the server no longer pre-crawls or fakes phases. Callback errors are swallowed. `tests/test_v14_progress.py` (7 tests) |
 | Misc | History uses `executemany`; SARIF reports real duration, placeholder URL removed; CI installs Gitleaks binary + runs tests with coverage gate; packaging limited to `scanner*` with package-data |
 
 ---
@@ -30,7 +31,6 @@ _Test status: 249 passed, 4 skipped, coverage 89% (gate: 75%)._
 2. **Merge the branch.** `fix/server-hardening` has not been merged into `main`. Review the 4 commits (`git log main..fix/server-hardening`), then merge or open a PR.
 
 ### P1 — real gaps
-3. **Web UI progress is coarse.** The SSE stream reports honest phases only (crawl → "analysing N files" → complete). Real per-file/per-phase progress needs a progress callback threaded through `main.run()` (`scanner/server/app.py` consumes it).
 4. **SQL has no grammar.** `.sql` files use the generic chunker. No maintained tree-sitter SQL package was found/trusted. Options: evaluate `tree-sitter-sql` variants, or add a statement-splitting chunker.
 5. **Optimizer is Python-only.** JS/TS/Go/Java get performance signal only from Semgrep rules (name-matched in `semgrep_runner._infer_category`) and the LLM. Consider tree-sitter-based equivalents of OPT001–OPT004.
 6. **Optimizer heuristics are conservative and name-based.** `_DB_METHODS` (`execute`, `fetchone`, `query`, …) and `_HTTP_OWNERS` (`requests`, `httpx`, `session`, `client`) can miss ORMs (`.filter()`, `.objects.get()`) and flag non-DB `.query()` methods. Tune with real-repo runs.
@@ -72,6 +72,7 @@ Always use the project venv. From the project root (`D:\AI_Projects\AI-Driven_Wo
 | Optimizer, config, OpenAI, redaction, prompt fence | `pytest tests/test_v11_hardening.py` |
 | Languages, concurrency, optimizer P/R, Groq failover, SARIF, history batch, live providers | `pytest tests/test_v12_remaining.py` |
 | SSE path, Semgrep/Gitleaks runners | `pytest tests/test_v13_coverage.py` |
+| Progress callback (run, static tools, auditor, SSE) | `pytest tests/test_v14_progress.py` |
 
 ### Live-provider smoke tests (opt-in)
 `tests/test_v12_remaining.py::test_live_*` are skipped unless credentials/daemon exist:

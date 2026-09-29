@@ -279,3 +279,33 @@ def test_save_baseline_fingerprints_are_strings(tmp_path: Path) -> None:
     for fp in data["fingerprints"]:
         assert isinstance(fp, str)
         assert len(fp) == 16
+
+
+# ---------------------------------------------------------------------------
+# Regression: distinct same-source findings must survive deduplication
+# (found by the labelled benchmark: nearby SQLi / MD5 / pickle hits were collapsed)
+# ---------------------------------------------------------------------------
+
+def test_dedup_keeps_distinct_findings_from_the_same_source() -> None:
+    first = _finding(line_start=6, line_end=6, rule_source="bandit")
+    second = _finding(line_start=11, line_end=11, rule_source="bandit")
+    deduped, n_removed = deduplicate([first, second])
+    assert n_removed == 0
+    assert {f.line_start for f in deduped} == {6, 11}
+
+
+def test_dedup_still_collapses_exact_repeats_from_one_source() -> None:
+    a = _finding(line_start=6, line_end=6, rule_source="bandit")
+    b = _finding(line_start=6, line_end=6, rule_source="bandit")
+    _, n_removed = deduplicate([a, b])
+    assert n_removed == 1
+
+
+def test_dedup_merges_across_sources_but_not_into_a_cluster_with_a_same_source_sibling() -> None:
+    bandit_a = _finding(line_start=6, line_end=6, rule_source="bandit", confidence=0.85)
+    llm = _finding(line_start=8, line_end=8, rule_source="llm", confidence=0.70)
+    bandit_b = _finding(line_start=11, line_end=11, rule_source="bandit", confidence=0.85)
+    deduped, n_removed = deduplicate([bandit_a, llm, bandit_b])
+    # llm merges with the first bandit hit; the second bandit hit stays separate
+    assert n_removed == 1
+    assert sorted(f.line_start for f in deduped) == [6, 11]

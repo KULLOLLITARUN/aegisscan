@@ -54,6 +54,9 @@ class ScanResult(BaseModel):
     llm_total_latency_seconds: float = 0.0# V5+: total time spent in LLM API calls
     llm_rate_limit_hits: int = 0          # V5+: total 429 rate limit responses encountered
     llm_fallback_triggered: bool = False  # V5+: True if provider fallback was used
+    llm_json_valid_count: int = 0         # responses that parsed on the first try
+    llm_json_repaired_count: int = 0      # responses that needed the repair prompt
+    llm_json_failed_count: int = 0        # responses that never parsed (chunk skipped)
 
     # ---- Scores — TODO: uncalibrated — introduced in V4 only ----
     security_score: Optional[float] = None       # 0–100, higher = safer

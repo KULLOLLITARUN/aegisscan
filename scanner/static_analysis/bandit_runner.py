@@ -52,6 +52,17 @@ _BANDIT_CATEGORY_MAP: dict[str, str] = {
 }
 
 
+# Bandit's B401-B415 flag the mere *import* of a risky module (subprocess, pickle, xml...).
+# Bandit is certain the import exists, but an import is not a vulnerability: on the labelled
+# benchmark 0 of 6 such findings were real issues. The call-site checks (B301, B602, ...)
+# are what matter, so import-only findings carry low confidence.
+_IMPORT_CHECK_CONFIDENCE = 0.30
+
+
+def _is_import_check(test_id: str) -> bool:
+    return test_id[:2].upper() == "B4" and len(test_id) == 4
+
+
 def _infer_category(test_id: str) -> str:
     prefix = test_id[:2].upper() if len(test_id) >= 2 else ""
     return _BANDIT_CATEGORY_MAP.get(prefix, "best_practices")
@@ -142,7 +153,9 @@ def _normalize(item: dict, target: Path) -> Finding:
         issue_type=item.get("test_name", "unknown").replace("_", " ").title(),
         category=_infer_category(test_id),
         severity=_BANDIT_SEVERITY.get(severity_str, Severity.INFO),
-        confidence=_BANDIT_CONFIDENCE.get(confidence_str, 0.30),
+        confidence=(
+            _IMPORT_CHECK_CONFIDENCE if _is_import_check(test_id) else _BANDIT_CONFIDENCE.get(confidence_str, 0.30)
+        ),
         line_start=line_start,
         line_end=line_end,
         evidence=item.get("code", "").strip(),

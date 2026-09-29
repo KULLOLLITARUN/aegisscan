@@ -19,6 +19,7 @@ V4 pipeline:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -57,6 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("path", type=Path, nargs="?", default=Path("."), help="Target directory to scan")
     p.add_argument("--verbose", "-v", action="store_true", help="Show per-file details")
     p.add_argument("--benchmark", action="store_true", help="Run precision/recall calibration benchmark suite")
+    p.add_argument("--benchmark-json", metavar="FILE", type=Path, help="With --benchmark: also write metrics as JSON")
     p.add_argument("--deep", action="store_true", help="Run LLM on ALL eligible chunks")
     p.add_argument("--static-only", action="store_true", help="Skip LLM pass")
     p.add_argument(
@@ -278,6 +280,7 @@ def run(
     privacy: str = "standard",
     generate_patches: bool = False,
     progress: Callable[[str, int, str], None] | None = None,
+    record_history: bool = True,
 ) -> tuple[ScanResult, list[FileInfo], list[CorrelationGroup]]:
     """
     V6/V8 pipeline:
@@ -352,6 +355,7 @@ def run(
     llm_model: str | None = None
     llm_chunks_analyzed: int = 0
     pm: ProviderManager | None = None
+    json_counts = (0, 0, 0)
 
     if not static_only or generate_patches:
         pm = ProviderManager()
@@ -369,6 +373,7 @@ def run(
                 all_chunks, static_findings, deep=deep,
                 progress=lambda d, t: _progress("LLM analysis", 50 + int(35 * d / max(t, 1)), f"{d}/{t} chunks"),
             )
+            json_counts = (auditor.json_valid_count, auditor.json_repaired_count, auditor.json_failed_count)
             llm_provider = pm.active_provider
             llm_model = pm.default_model
 
@@ -422,17 +427,21 @@ def run(
         llm_total_latency_seconds=round(pm.total_latency_seconds, 3) if pm else 0.0,
         llm_rate_limit_hits=pm.rate_limit_hits if pm else 0,
         llm_fallback_triggered=pm.fallback_triggered if pm else False,
+        llm_json_valid_count=json_counts[0],
+        llm_json_repaired_count=json_counts[1],
+        llm_json_failed_count=json_counts[2],
         security_score=sec_sc,
         optimization_score=opt_sc,
         findings=final_findings,
     )
 
-    try:
-        from scanner.storage.history import ScanHistoryDB
-        db_file = path / ".aegisscan_history.db"
-        ScanHistoryDB(db_path=db_file).record_scan(result)
-    except Exception as exc:
-        log.warning("Failed to record scan to history DB: %s", exc)
+    if record_history:
+        try:
+            from scanner.storage.history import ScanHistoryDB
+            db_file = path / ".aegisscan_history.db"
+            ScanHistoryDB(db_path=db_file).record_scan(result)
+        except Exception as exc:
+            log.warning("Failed to record scan to history DB: %s", exc)
 
     return result, all_files, groups
 
@@ -491,6 +500,9 @@ def main() -> None:
         runner = BenchmarkRunner()
         metrics = runner.run_benchmark(static_only=args.static_only)
         runner.print_report(metrics)
+        if args.benchmark_json:
+            args.benchmark_json.write_text(json.dumps(metrics.to_dict(), indent=2), encoding="utf-8")
+            print(f"Benchmark metrics written to {args.benchmark_json}")
         return
 
     result, all_files, groups = run(

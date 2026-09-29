@@ -7,6 +7,11 @@ Deduplication strategy (V3):
     - Overlapping or adjacent line ranges (within PROXIMITY_LINES lines)
     - Same semantic category
 
+  A finding never merges into a cluster that already holds a *different* finding from
+  its own source: one tool reports each distinct issue once, so two hits from the same
+  tool a few lines apart (e.g. two SQL injections) are separate issues, not duplicates.
+  Only identical repeats (same source, issue type and lines) collapse within a source.
+
   When duplicates are found, the one with the HIGHEST confidence is kept.
   If confidence is equal, source priority applies:
     llm > bandit > semgrep > gitleaks
@@ -73,6 +78,22 @@ def _findings_overlap(a: Finding, b: Finding) -> bool:
     return a_start <= b_end + PROXIMITY_LINES and b_start <= a_end + PROXIMITY_LINES
 
 
+def _same_issue(a: Finding, b: Finding) -> bool:
+    """An exact repeat of the same finding by the same source."""
+    return (
+        a.rule_source == b.rule_source
+        and a.issue_type == b.issue_type
+        and a.line_start == b.line_start
+        and a.line_end == b.line_end
+    )
+
+
+def _can_join(finding: Finding, cluster: list[Finding]) -> bool:
+    if not _findings_overlap(finding, cluster[0]):
+        return False
+    return all(m.rule_source != finding.rule_source or _same_issue(m, finding) for m in cluster)
+
+
 def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
     """
     Remove near-duplicate findings and return (deduped_list, n_suppressed).
@@ -89,8 +110,7 @@ def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
     for f in findings:
         placed = False
         for cluster in clusters:
-            # Compare against the representative (first member) of each cluster
-            if _findings_overlap(f, cluster[0]):
+            if _can_join(f, cluster):
                 cluster.append(f)
                 placed = True
                 break

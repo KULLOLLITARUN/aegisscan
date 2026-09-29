@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "description": "Ground-truth labels for the AegisScan benchmark. Labels were written by reading the code, NOT from tool output. Every listed file is exhaustively labelled: a finding that matches no label is a false positive. expected_by lists the tools that could reasonably catch the issue; recall_in_scope only counts labels whose expected_by intersects the tools that were active in a run.",
+  "line_tolerance": 1,
+  "files": [
+    {"path": "vulnerable_python/app.py", "labels": [
+      {"lines": [18, 18], "category": "secrets", "expected_by": ["bandit", "gitleaks", "llm"], "note": "hardcoded DB password"},
+      {"lines": [19, 19], "category": "secrets", "expected_by": ["bandit", "gitleaks", "llm"], "note": "hardcoded API secret"},
+      {"lines": [29, 30], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "SQLi via concatenation in get_user"},
+      {"lines": [36, 37], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "SQLi via concatenation in search_products"},
+      {"lines": [42, 42], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "shell=True with concatenated input"},
+      {"lines": [47, 47], "category": "deserialization", "expected_by": ["bandit", "semgrep", "llm"], "note": "pickle.loads on untrusted bytes"},
+      {"lines": [53, 55], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "SQLi in UPDATE"}
+    ]},
+    {"path": "vulnerable_python/auth.py", "labels": [
+      {"lines": [14, 14], "category": "secrets", "expected_by": ["bandit", "gitleaks", "llm"], "note": "hardcoded signing key"},
+      {"lines": [15, 15], "category": "secrets", "expected_by": ["bandit", "gitleaks", "llm"], "note": "hardcoded admin password"},
+      {"lines": [20, 20], "category": "crypto", "expected_by": ["bandit", "semgrep", "llm"], "note": "MD5 password hash"},
+      {"lines": [25, 25], "category": "crypto", "expected_by": ["bandit", "semgrep", "llm"], "note": "MD5 password verify"},
+      {"lines": [30, 30], "category": "access_control", "expected_by": ["llm"], "note": "assert used as authorization check (Bandit B101 is skipped on purpose)"},
+      {"lines": [35, 36], "category": "crypto", "expected_by": ["bandit", "llm"], "note": "predictable MD5 token"}
+    ]},
+    {"path": "vulnerable_python/config.py", "labels": [
+      {"lines": [19, 20], "category": "best_practices", "expected_by": ["bandit", "llm"], "note": "bare except: pass"},
+      {"lines": [28, 29], "category": "best_practices", "expected_by": ["bandit", "llm"], "note": "bare except: pass"}
+    ]},
+
+    {"path": "vulnerable_js/command_injection.js", "labels": [
+      {"lines": [16, 16], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "exec with interpolated filename"},
+      {"lines": [24, 24], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "execSync with interpolated path"},
+      {"lines": [31, 32], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "path.join with user input then readFileSync"},
+      {"lines": [38, 38], "category": "injection", "expected_by": ["llm"], "note": "git argument injection via spawn"},
+      {"lines": [44, 44], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "new Function with user template"},
+      {"lines": [53, 53], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "eval-based deserialization"},
+      {"lines": [60, 60], "category": "redirect", "expected_by": ["semgrep", "llm"], "note": "open redirect"},
+      {"lines": [68, 69], "category": "injection", "expected_by": ["llm"], "note": "XXE: DTD processing enabled"}
+    ]},
+    {"path": "vulnerable_js/hardcoded_jwt.js", "labels": [
+      {"lines": [13, 13], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "hardcoded JWT secret"},
+      {"lines": [28, 28], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "hardcoded DB password"},
+      {"lines": [33, 33], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "AWS access key id"},
+      {"lines": [34, 34], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "AWS secret access key"},
+      {"lines": [38, 38], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "Stripe live key"},
+      {"lines": [39, 39], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "SendGrid key"},
+      {"lines": [40, 40], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "GitHub token"},
+      {"lines": [46, 46], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "MD5 password hash"},
+      {"lines": [51, 51], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "AES-ECB with static key"},
+      {"lines": [58, 58], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "Math.random for reset token"},
+      {"lines": [64, 64], "category": "crypto", "expected_by": ["llm"], "note": "predictable CSRF token"}
+    ]},
+    {"path": "vulnerable_js/xss_and_eval.js", "labels": [
+      {"lines": [13, 13], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "innerHTML from user data"},
+      {"lines": [19, 19], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "eval of user expression"},
+      {"lines": [25, 25], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "setTimeout with code string"},
+      {"lines": [31, 31], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "document.write with query"},
+      {"lines": [39, 39], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "vm.runInNewContext"},
+      {"lines": [47, 47], "category": "xss", "expected_by": ["llm"], "note": "href built from user input"},
+      {"lines": [54, 55], "category": "injection", "expected_by": ["llm"], "note": "prototype pollution via unchecked merge"},
+      {"lines": [64, 64], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "innerHTML from postMessage without origin check"}
+    ]},
+
+    {"path": "benchmark_corpus/vuln_sqli.py", "labels": [
+      {"lines": [6, 6], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "f-string SQL"},
+      {"lines": [11, 11], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "%-format SQL"},
+      {"lines": [16, 16], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": ".format SQL"},
+      {"lines": [21, 21], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "concatenated DELETE"}
+    ]},
+    {"path": "benchmark_corpus/vuln_exec.py", "labels": [
+      {"lines": [7, 7], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "os.system with concatenated host"},
+      {"lines": [11, 11], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "Popen shell=True"},
+      {"lines": [15, 15], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "check_output shell=True with f-string"},
+      {"lines": [19, 19], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "eval of user expression"},
+      {"lines": [23, 23], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "exec of user code"}
+    ]},
+    {"path": "benchmark_corpus/vuln_deserialize.py", "labels": [
+      {"lines": [9, 9], "category": "deserialization", "expected_by": ["bandit", "semgrep", "llm"], "note": "pickle.loads"},
+      {"lines": [13, 13], "category": "deserialization", "expected_by": ["bandit", "semgrep", "llm"], "note": "pickle.load"},
+      {"lines": [17, 17], "category": "deserialization", "expected_by": ["bandit", "semgrep", "llm"], "note": "yaml.load without safe loader"},
+      {"lines": [21, 21], "category": "deserialization", "expected_by": ["bandit", "llm"], "note": "marshal.loads"}
+    ]},
+    {"path": "benchmark_corpus/vuln_crypto.py", "labels": [
+      {"lines": [7, 7], "category": "crypto", "expected_by": ["bandit", "semgrep", "llm"], "note": "MD5 password hash"},
+      {"lines": [11, 11], "category": "crypto", "expected_by": ["bandit", "semgrep", "llm"], "note": "SHA-1 fingerprint"},
+      {"lines": [15, 15], "category": "crypto", "expected_by": ["bandit", "semgrep", "llm"], "note": "random module for reset token"}
+    ]},
+    {"path": "benchmark_corpus/vuln_network.py", "labels": [
+      {"lines": [9, 9], "category": "network", "expected_by": ["bandit", "semgrep", "llm"], "note": "verify=False"},
+      {"lines": [13, 13], "category": "network", "expected_by": ["bandit", "semgrep", "llm"], "note": "urlopen on caller-supplied URL (file:// and SSRF)"},
+      {"lines": [17, 17], "category": "network", "expected_by": ["bandit", "semgrep", "llm"], "note": "unverified SSL context"},
+      {"lines": [21, 21], "category": "network", "expected_by": ["bandit", "llm"], "note": "request without timeout"}
+    ]},
+    {"path": "benchmark_corpus/vuln_secrets.py", "labels": [
+      {"lines": [3, 3], "category": "secrets", "expected_by": ["bandit", "gitleaks", "llm"], "note": "hardcoded DB password"},
+      {"lines": [4, 4], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "AWS access key id"},
+      {"lines": [5, 5], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "Stripe live key"},
+      {"lines": [6, 8], "category": "secrets", "expected_by": ["gitleaks", "semgrep", "llm"], "note": "PEM private key"},
+      {"lines": [11, 12], "category": "secrets", "expected_by": ["bandit", "gitleaks", "llm"], "note": "hardcoded default password"}
+    ]},
+    {"path": "benchmark_corpus/vuln_misc.py", "labels": [
+      {"lines": [13, 13], "category": "best_practices", "expected_by": ["bandit", "semgrep", "llm"], "note": "tempfile.mktemp race"},
+      {"lines": [17, 17], "category": "access_control", "expected_by": ["bandit", "semgrep", "llm"], "note": "chmod 0o777"},
+      {"lines": [21, 21], "category": "injection", "expected_by": ["bandit", "semgrep", "llm"], "note": "XXE-prone ElementTree parse of untrusted XML"},
+      {"lines": [25, 25], "category": "xss", "expected_by": ["bandit", "semgrep", "llm"], "note": "Jinja2 autoescape disabled"},
+      {"lines": [30, 30], "category": "access_control", "expected_by": ["llm"], "note": "assert as authorization check (Bandit B101 is skipped on purpose)"},
+      {"lines": [35, 36], "category": "best_practices", "expected_by": ["bandit", "llm"], "note": "except Exception: pass"},
+      {"lines": [40, 40], "category": "misconfig", "expected_by": ["bandit", "semgrep", "llm"], "note": "Flask debug=True bound to 0.0.0.0"}
+    ]},
+
+    {"path": "slow_python/orders.py", "labels": [
+      {"lines": [9, 9], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "N+1 query in loop"},
+      {"lines": [17, 17], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "quadratic string building"},
+      {"lines": [24, 24], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "O(n^2) nested loop over same list"},
+      {"lines": [33, 33], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "regex recompiled per iteration"}
+    ]},
+    {"path": "slow_python/reports.py", "labels": [
+      {"lines": [8, 8], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "network call per item"},
+      {"lines": [16, 16], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "string built in while loop"},
+      {"lines": [22, 22], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "query per user in comprehension"},
+      {"lines": [28, 28], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "O(n^2) nested loop"}
+    ]},
+    {"path": "slow_js/orders.js", "labels": [
+      {"lines": [5, 5], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "N+1 query in loop"},
+      {"lines": [14, 14], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "N+1 ORM lookup"},
+      {"lines": [22, 22], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "serial awaited fetch in loop"},
+      {"lines": [30, 30], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "quadratic string building"},
+      {"lines": [38, 38], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "O(n^2) nested loop"},
+      {"lines": [48, 48], "category": "performance", "expected_by": ["aegis-opt", "llm"], "note": "RegExp rebuilt per iteration"}
+    ]},
+
+    {"path": "benchmark_corpus/safe_sql.py", "labels": []},
+    {"path": "benchmark_corpus/safe_exec.py", "labels": []},
+    {"path": "benchmark_corpus/safe_crypto.py", "labels": []},
+    {"path": "benchmark_corpus/safe_config.py", "labels": []},
+    {"path": "tricky_clean_python/ok.py", "labels": []},
+    {"path": "tricky_clean_js/ok.js", "labels": []},
+    {"path": "clean_project/app.py", "labels": []},
+    {"path": "clean_project/auth.py", "labels": []},
+    {"path": "clean_python/config_loader.py", "labels": []},
+    {"path": "clean_python/data_processor.py", "labels": []},
+    {"path": "clean_python/math_utils.py", "labels": []},
+    {"path": "clean_pipeline_test/config.py", "labels": []},
+    {"path": "clean_pipeline_test/ingest.py", "labels": []},
+    {"path": "clean_pipeline_test/run_pipeline.py", "labels": []},
+    {"path": "clean_pipeline_test/transform.py", "labels": []}
+  ]
+}

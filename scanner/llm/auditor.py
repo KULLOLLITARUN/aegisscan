@@ -94,6 +94,15 @@ class LLMAuditor:
         self._trigger = TriggerEngine()
         self._privacy_mode = privacy_mode
         self._generate_patches = generate_patches
+        # JSON-contract telemetry (plan section 7): responses valid first try / after repair / never
+        self._json_lock = threading.Lock()
+        self.json_valid_count = 0
+        self.json_repaired_count = 0
+        self.json_failed_count = 0
+
+    def _record_json(self, attr: str) -> None:
+        with self._json_lock:
+            setattr(self, attr, getattr(self, attr) + 1)
 
     @property
     def is_available(self) -> bool:
@@ -240,6 +249,7 @@ class LLMAuditor:
 
         result = _try_parse(content)
         if result is not None:
+            self._record_json("json_valid_count")
             return result
 
         # One repair attempt
@@ -250,11 +260,15 @@ class LLMAuditor:
         ]
         repair_response = self._manager.complete(repair_messages, max_tokens=1024, temperature=0.0)
         if not repair_response.content:
+            self._record_json("json_failed_count")
             return None
 
         result = _try_parse(repair_response.content)
         if result is None:
+            self._record_json("json_failed_count")
             log.warning("LLM repair attempt failed — skipping chunk")
+        else:
+            self._record_json("json_repaired_count")
         return result
 
     @staticmethod

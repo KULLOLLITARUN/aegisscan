@@ -35,6 +35,17 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
 
 
+def _ui_build_hint() -> str | None:
+    """How to get the React dashboard when only the basic fallback page is available.
+    The build output (scanner/server/dist) is not committed; see the README."""
+    if _INDEX_HTML.exists():
+        return None
+    return (
+        "React dashboard build not found - serving the basic fallback page.\n"
+        "  Build it once with: cd scanner/server/ui && npm ci && npm run build"
+    )
+
+
 def _allowed_roots() -> list[Path]:
     """Directories the server may scan: the project root plus any paths listed in
     AEGISSCAN_ALLOWED_ROOTS (os.pathsep-separated). Read per request so it can be
@@ -319,6 +330,9 @@ def run_server(port: int = 8000) -> None:
     print("  AEGISSCAN COMMAND CENTER")
     print(f"  -> http://localhost:{port}")
     print("  Press Ctrl+C to stop.")
+    hint = _ui_build_hint()
+    if hint:
+        print(f"\n  NOTE: {hint}")
     print(f"{'='*62}\n")
     try:
         httpd.serve_forever()

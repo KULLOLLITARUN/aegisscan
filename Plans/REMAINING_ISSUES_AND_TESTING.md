@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 379 passed, 4 skipped, coverage 91% (gate: 75%)._
+_Test status: 382 passed, 4 skipped, coverage 91% (gate: 75%)._
 
 ---
 
@@ -20,6 +20,9 @@ _Test status: 379 passed, 4 skipped, coverage 91% (gate: 75%)._
 | Languages | Tree-sitter chunking for Go, Java, PHP, C# (plus Python/JS/TS) |
 | Coverage | `tests/test_v13_coverage.py` (34 tests, mocked): SSE stream, error/strict-privacy paths, log forwarding, sync-scan errors, Semgrep and Gitleaks runners incl. fallbacks. `semgrep_runner` 99%, `gitleaks_runner` 89% |
 | Lint | `ruff` added (`[tool.ruff]` in pyproject: E4/E7/E9, F, B, I; `examples/` and `ui/` excluded; `main.py` ignores E402/E701 by design). Baseline cleaned (unused imports, import order, f-strings, ambiguous `l`, frozen-model test now expects `ValidationError`); `manager.py` binds the provider explicitly in the retry closure. CI runs `ruff check .` before tests. Locally: `python -m ruff check .` (inside the venv) |
+| UI shipping | Decision: the build output (`scanner/server/dist`) stays uncommitted (hashed files would churn every rebuild). README now documents `npm ci && npm run build` (Node 22+) and a Windows caveat; the server prints a reminder and serves the basic fallback page when `dist/` is absent (`_ui_build_hint`); CI has a new `ui-build` job (npm ci, lint, build, upload `aegisscan-ui-dist`). The UI build and lint were verified locally by calling vite/oxlint through node (lint: 2 warnings, exit 0; build reproduces the same hashed files). The `ui-build` job itself has never run |
+| CI test bug | `test_server_dashboard_route` asserted text that only exists in the gitignored React build, so it failed on any fresh clone / CI (confirmed by running the old test with `dist/` hidden). Now hermetic; 4 more tests cover the fallback page and the reminder |
+| README | Replaced the fabricated benchmark output and the stale 183-test count with real figures |
 | Benchmark | Replaced the tautological benchmark (every finding counted as a TP, expected count `max(4, tp)`, so recall was always 1.0). Now `examples/benchmark_labels.json` holds ground truth written by reading the code: 31 files (15 clean), 88 labels, incl. a new CVE-style `examples/benchmark_corpus/` (7 vulnerable + 4 safe look-alike files). `scanner/evaluation/benchmark.py` reports precision, recall (in scope of the active tools, and over all labels), FPR, per-source precision, per-category recall, calibration bins + ECE + Brier, and for LLM runs JSON validity rate and latency/request. `main.py --benchmark [--benchmark-json FILE]`. Baseline (Bandit + Gitleaks fallback + optimizer, Semgrep off): precision 86%, in-scope recall 100% (75% of all labels; the rest need Semgrep/LLM), 3/15 clean files flagged, ECE 0.14, Brier 0.11. `tests/test_v18_benchmark.py` (27 tests) gates recall >= 0.95, precision >= 0.80, ECE/Brier <= 0.20. `tests/test_v7_benchmark.py` was removed: it asserted the fake metrics |
 | Deduplicator bug | Found by the benchmark: findings in the same file+category within 5 lines were merged, so two distinct SQLi/MD5/pickle hits a few lines apart collapsed into one (in-scope recall 81% -> 97%). Now a finding never joins a cluster that already holds a *different* finding from its own source; cross-source merging is unchanged. Regression tests in `tests/test_intelligence.py` and `test_v18_benchmark.py` |
 | Confidence calibration | Bandit B401-B415 (import-only checks) now carry confidence 0.30: 0 of 6 were real issues on the benchmark although Bandit reported them at 0.85 (Brier 0.153 -> 0.106). Nothing else was tuned: 84 findings from a self-authored corpus is too small to fit further. Bandit B101 (assert) stays skipped on purpose, so the two assert-as-auth labels are LLM-only |
@@ -41,7 +44,6 @@ _Test status: 379 passed, 4 skipped, coverage 91% (gate: 75%)._
 7. **Benchmark is still small and self-authored.** 88 labels / 31 files; calibration bins hold only 1-47 findings each. Remaining work: (a) run it once with a live LLM (`main.py --benchmark`, needs a key) to record JSON validity and latency per request, which have never been measured; (b) run with Semgrep online to score the JS labels; (c) add real CVE-derived samples and other languages; (d) measured precision on safe look-alikes is imperfect by design (Bandit flags `IN (?,?)` placeholder SQL and allow-listed `ORDER BY`), so don't treat the current 86% as a ceiling to game.
 8. **No type-check gate.** `ruff` is now gated in CI (see section 1) but `mypy` is not. Adding it means fixing the existing type errors first; widen the ruff rule set (UP, SIM, BLE) deliberately later.
 9. **Coverage hot spots (remaining):** `git_diff.py` (~61%), `ollama_provider.py` (~70%), `patcher.py` (~67%). `server/app.py`, `semgrep_runner.py` and `gitleaks_runner.py` are now covered (see section 1).
-10. **Built UI is not committed.** `dist/` is in `.gitignore`, so `scanner/server/dist` is absent in a fresh clone → run `npm ci && npm run build` in `scanner/server/ui/`. Decide: commit the build, build in CI, or document it (README currently doesn't mention the UI build).
 11. **Node/JS assets live inside the Python package tree** (`scanner/server/ui/node_modules`). Harmless for git (ignored) but bloats the working directory; consider moving `ui/` to the repo root.
 
 ### P2 — design decisions / nice to have
@@ -80,6 +82,7 @@ Always use the project venv. From the project root (`D:\AI_Projects\AI-Driven_Wo
 | Optimizer ORM heuristics | `pytest tests/test_v15_optimizer_orm.py` |
 | Optimizer JS/TS | `pytest tests/test_v16_optimizer_js.py` |
 | SQL chunker | `pytest tests/test_v17_sql_chunker.py` |
+| Dashboard route, fallback page, build reminder | `pytest tests/test_v10_server.py` |
 | Labelled benchmark, dedup regression, JSON-validity telemetry | `pytest tests/test_v18_benchmark.py tests/test_intelligence.py` |
 | Print the benchmark report | `python main.py --benchmark --static-only` (inside the venv) |
 
@@ -100,3 +103,5 @@ Always use the project venv. From the project root (`D:\AI_Projects\AI-Driven_Wo
 - Git Bash heredocs containing many quotes can fail to parse; prefer writing scripts to files.
 - `find`/`Glob` over the project descend into `.venv` and `scanner/server/ui/node_modules` — scope searches to `scanner`, `tests`, `examples`.
 - Files use CRLF; when scripting edits preserve line endings.
+- The project path contains `&` (`Security_&_Optimization`), so `npm run ...` fails under cmd.exe (npm reports `Cannot find module` for vite or oxlint). Call the tools through node instead: `node node_modules/vite/bin/vite.js build`, `node node_modules/oxlint/bin/oxlint`. Do not run `npm ci` here (it wipes node_modules and would hit the same problem).
+- Semgrep is installed in the venv but produced no findings in the last full `--benchmark` run (cause not investigated: registry/network, rules, or config). Because it is installed, the benchmark counts it as active, so the JS labels show as missed (in-scope recall 81% instead of 100%).

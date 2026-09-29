@@ -92,42 +92,56 @@ aegisscan --benchmark
 
 ---
 
-## 🧪 Benchmark & Quality Calibration
+## 🖥️ Web Dashboard
 
-AegisScan includes a benchmark evaluation runner against fixed test suites:
-- `examples/vulnerable_python/` — 3 files with deliberate SQL injection, hardcoded secrets, and injection patterns
-- `examples/clean_project/` — 2 files using parameterized queries, env-var secrets, no known risks
+The React dashboard's build output (`scanner/server/dist`) is **not committed**. Build it once, then start the server:
 
 ```bash
-aegisscan --benchmark --static-only
+cd scanner/server/ui
+npm ci
+npm run build          # writes scanner/server/dist
+cd ../../..
+aegisscan --server --port 8000
 ```
 
+Without the build the server still starts and serves a basic fallback page, and prints a reminder. Requires Node 22+ (Vite 8). For frontend work run `npm run dev` (port 5173, proxies `/api` to `127.0.0.1:8000`). CI lints and builds the UI on every push and uploads it as the `aegisscan-ui-dist` artifact.
+
+> **Windows:** `npm run ...` fails if the project path contains `&` (for example `Security_&_Optimization`) because `cmd.exe` splits on it. Use a path without `&`, or call the tools directly: `node node_modules/vite/bin/vite.js build`.
+
+---
+
+## 🧪 Benchmark & Quality Calibration
+
+`aegisscan --benchmark` scores the scanner against a ground-truth manifest, `examples/benchmark_labels.json`: 31 files (15 clean), 88 labelled issues, written by reading the code rather than from tool output. It includes a CVE-style corpus (`examples/benchmark_corpus/`: SQL injection, command injection, deserialization, weak crypto, TLS misuse, hardcoded secrets, plus safe look-alikes) and the performance fixtures.
+
+```bash
+aegisscan --benchmark --static-only                     # print the report
+aegisscan --benchmark --benchmark-json metrics.json     # also write machine-readable metrics
 ```
-============================================================
- AEGISSCAN BENCHMARK & CALIBRATION REPORT (V7)
-============================================================
- Vulnerable Python Findings : 12
- Clean Project Findings     : 0 (False Positives)
- True Positives (TP)        : 12
- False Positives (FP)       : 0
-------------------------------------------------------------
- Precision                  : 100.00%
- Recall                     : 100.00%
- F1 Score                   : 100.00%
- False Positive Rate (FPR)  : 0.00%
- Total Evaluation Time      : 1.05s
-============================================================
-```
+
+It reports precision, recall, false-positive rate (share of clean files flagged), per-source precision, per-category recall, **confidence calibration** (reliability bins, ECE, Brier score) and, for LLM runs, JSON validity rate and latency per request. Recall is counted over the labels that an *active* tool is expected to catch, and separately over all labels.
+
+Measured with Bandit + built-in secret scanner + optimizer (Semgrep off, which is what the test suite gates on):
+
+| Metric | Value |
+|---|---|
+| Precision | 85.7% (72 TP / 12 FP) |
+| Recall, labels in scope | 100% (66 labels) |
+| Recall, all labels | 75% (the other 22 need Semgrep or an LLM) |
+| Clean files flagged | 3 of 15 |
+| Calibration | ECE 0.138, Brier 0.106 |
+
+Read these as a small-sample baseline, not a quality claim: the corpus is self-authored, and the false positives are mostly Bandit notes on safe code (`import subprocess`, placeholder-built `IN (?,?)` SQL, allow-listed `ORDER BY`). Semgrep and LLM numbers depend on network and API access; in the last full run Semgrep was installed but contributed no findings, so the JavaScript labels showed as missed (in-scope recall 81%). No LLM run has been recorded yet.
 
 ---
 
 ## 🧪 Automated Testing
 
-AegisScan is protected by a 183-test automated unit suite covering crawler logic, tree-sitter chunking, static analysis runners, LLM failover, scoring engines, CI build gates, SQLite persistence, and web server endpoints.
+AegisScan is protected by a 382-test automated suite (4 opt-in live-provider tests are skipped without credentials) covering crawler logic, tree-sitter chunking, static analysis runners, LLM failover, scoring engines, CI build gates, SQLite persistence, and web server endpoints.
 
 ```bash
 pytest tests/ -v
-# Output: 183 passed, 2 skipped in 24s
+# Output: 382 passed, 4 skipped in ~90-120s
 ```
 
 ---

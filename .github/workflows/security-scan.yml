@@ -49,3 +49,36 @@ jobs:
         with:
           name: aegisscan-report
           path: aegisscan-report.html
+
+  ui-build:
+    # The React build output (scanner/server/dist) is not committed. Build it here so a broken
+    # UI is caught on every push, and publish it for anyone who wants the ready-made bundle.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scanner/server/ui
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scanner/server/ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm ci
+
+      - name: Lint UI
+        run: npm run lint
+
+      - name: Build UI
+        run: npm run build
+
+      - name: Upload UI bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: aegisscan-ui-dist
+          path: scanner/server/dist

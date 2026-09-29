@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from scanner.llm.redactor import PrivacyMode, redact
+
 if TYPE_CHECKING:
     from scanner.models.finding import Finding
     from scanner.providers.manager import ProviderManager
@@ -54,19 +56,26 @@ def _generate_fallback_patch(finding: Finding) -> str:
 +{fixed_line}"""
 
 
-def generate_patch_for_finding(finding: Finding, provider_manager: ProviderManager | None = None) -> str | None:
+def generate_patch_for_finding(
+    finding: Finding,
+    provider_manager: ProviderManager | None = None,
+    privacy_mode: PrivacyMode | str = PrivacyMode.STANDARD,
+) -> str | None:
     """Request a unified git diff patch from active LLM provider or fallback template."""
     if not finding.evidence or not finding.evidence.strip():
         return None
 
     if provider_manager and provider_manager.is_available:
+        # Plan §2 rule 8: nothing leaves the machine unredacted, even if a caller hands us a
+        # static finding whose evidence is a raw secret (Gitleaks stores the secret itself).
+        evidence = redact(finding.evidence, mode=privacy_mode)
         prompt = (
             f"File: {finding.file_path}\n"
             f"Line range: {finding.line_start}-{finding.line_end}\n"
             f"Issue: {finding.issue_type} ({finding.category})\n"
             f"Explanation: {finding.explanation}\n\n"
             f"Vulnerable Code:\n"
-            f"```python\n{finding.evidence}\n```\n\n"
+            f"```python\n{evidence}\n```\n\n"
             f"Generate a unified git diff patch fixing this issue."
         )
 

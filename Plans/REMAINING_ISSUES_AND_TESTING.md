@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 414 passed, 4 skipped, coverage 92% (gate: 75%)._
+_Test status: 416 passed, 4 skipped, coverage 92% (gate: 75%)._
 
 ---
 

@@ -173,6 +173,21 @@ def test_llm_failure_or_absence_falls_back_to_template(pm) -> None:
         assert len(pm.calls) == 1               # the LLM was tried before falling back
 
 
+def test_patcher_redacts_secret_evidence_before_sending_to_llm() -> None:
+    secret = "gsk_" + "a1B2c3D4e5F6g7H8i9J0k1L2"
+    pm = _PM(_DIFF)
+    generate_patch_for_finding(_finding(f'API_KEY = "{secret}"'), pm)
+    sent = pm.calls[0]["messages"][1]["content"]
+    assert secret not in sent
+    assert "[REDACTED" in sent
+
+
+def test_patcher_honours_strict_privacy_mode() -> None:
+    pm = _PM(_DIFF)
+    generate_patch_for_finding(_finding('greeting = "hello world"'), pm, privacy_mode="strict")
+    assert "hello world" not in pm.calls[0]["messages"][1]["content"]
+
+
 @pytest.mark.parametrize("evidence", ["", "   \n  "])
 def test_blank_evidence_returns_none_even_with_provider(evidence: str) -> None:
     pm = _PM(_DIFF)

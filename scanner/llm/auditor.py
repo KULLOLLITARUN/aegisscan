@@ -157,7 +157,7 @@ class LLMAuditor:
                 from scanner.llm.patcher import generate_patch_for_finding
                 for f in kept:
                     if f.severity in (Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM):
-                        f.fix_patch = generate_patch_for_finding(f, self._manager)
+                        f.fix_patch = generate_patch_for_finding(f, self._manager, self._privacy_mode)
             _tick()
             return kept, len(findings) - len(kept)
 

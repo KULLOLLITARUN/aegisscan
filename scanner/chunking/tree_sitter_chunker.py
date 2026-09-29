@@ -17,6 +17,7 @@ Language-string contract:
     "Python"      → "Python"
     "JavaScript"  → "JavaScript"
     "TypeScript"  → "TypeScript"
+    "Go", "Java", "PHP", "C#" (added later; same exact-match rule)
 """
 from __future__ import annotations
 
@@ -46,6 +47,10 @@ _TS_GRAMMAR_MAP: dict[str, _GrammarSpec] = {
     "Python":     _GrammarSpec("tree_sitter_python",     "language"),
     "JavaScript": _GrammarSpec("tree_sitter_javascript", "language"),
     "TypeScript": _GrammarSpec("tree_sitter_typescript", "language_typescript"),
+    "Go":         _GrammarSpec("tree_sitter_go",         "language"),
+    "Java":       _GrammarSpec("tree_sitter_java",       "language"),
+    "PHP":        _GrammarSpec("tree_sitter_php",        "language_php"),
+    "C#":         _GrammarSpec("tree_sitter_c_sharp",    "language"),
 }
 
 # Node types we extract as CodeChunks, per language
@@ -66,6 +71,16 @@ _SYMBOL_NODE_TYPES: dict[str, frozenset[str]] = {
         "class_declaration",
         "method_definition",
     }),
+    "Go": frozenset({"function_declaration", "method_declaration"}),
+    "Java": frozenset({
+        "class_declaration", "interface_declaration",
+        "method_declaration", "constructor_declaration",
+    }),
+    "PHP": frozenset({"function_definition", "class_declaration", "method_declaration"}),
+    "C#": frozenset({
+        "class_declaration", "interface_declaration", "struct_declaration",
+        "method_declaration", "constructor_declaration",
+    }),
 }
 
 _NODE_TYPE_TO_SYMBOL_TYPE: dict[str, str] = {
@@ -75,6 +90,10 @@ _NODE_TYPE_TO_SYMBOL_TYPE: dict[str, str] = {
     "class_definition":     "class",
     "class_declaration":    "class",
     "method_definition":    "method",
+    "method_declaration":   "method",
+    "constructor_declaration": "method",
+    "interface_declaration": "class",
+    "struct_declaration":   "class",
 }
 
 # Cache: language string → Language object or None if load failed

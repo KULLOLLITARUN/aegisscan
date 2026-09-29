@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
-import threading
+import os
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -29,6 +29,34 @@ log = logging.getLogger(__name__)
 # React Vite build output lives one level up from ui/
 _DIST_DIR = Path(__file__).parent / "dist"
 _INDEX_HTML = _DIST_DIR / "index.html"
+
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
+
+
+def _allowed_roots() -> list[Path]:
+    """Directories the server may scan: the project root plus any paths listed in
+    AEGISSCAN_ALLOWED_ROOTS (os.pathsep-separated). Read per request so it can be
+    changed without a restart."""
+    roots = [_PROJECT_ROOT.resolve()]
+    for extra in os.environ.get("AEGISSCAN_ALLOWED_ROOTS", "").split(os.pathsep):
+        if extra.strip():
+            roots.append(Path(extra.strip()).resolve())
+    return roots
+
+
+def _resolve_scan_path(raw_path: str) -> Path:
+    """Resolve a user-supplied scan path; raise PermissionError if it lies outside
+    every allowed root (blocks scanning arbitrary directories via the API)."""
+    candidate = Path(raw_path)
+    target = (candidate if candidate.is_absolute() else _PROJECT_ROOT / candidate).resolve()
+    for root in _allowed_roots():
+        if target == root or root in target.parents:
+            return target
+    raise PermissionError(
+        f"Path is outside the allowed scan roots: {target}. "
+        "Set AEGISSCAN_ALLOWED_ROOTS to permit additional directories."
+    )
 
 
 def _parse_qs_bool(val: str | None, default: bool = False) -> bool:
@@ -71,9 +99,23 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
+
+    def _request_allowed(self) -> bool:
+        """Reject DNS-rebinding (non-local Host) and cross-site (foreign Origin)
+        requests. The UI is served same-origin, so no CORS is needed."""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0] if self.headers.get("Host") else ""
+        if host and host.lower() not in _LOCAL_HOSTS:
+            self._send_json({"error": "Forbidden host"}, status=HTTPStatus.FORBIDDEN)
+            return False
+        origin = self.headers.get("Origin")
+        if origin:
+            origin_host = (urlparse(origin).hostname or "").lower()
+            if origin_host not in {"localhost", "127.0.0.1", "::1"}:
+                self._send_json({"error": "Forbidden origin"}, status=HTTPStatus.FORBIDDEN)
+                return False
+        return True
 
     def _serve_static(self, path: Path) -> None:
         if not path.exists() or not path.is_file():
@@ -93,6 +135,9 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         path = parsed.path
 
         # ── Scan history ──────────────────────────────────────────────────
+        if path.startswith("/api/") and not self._request_allowed():
+            return
+
         if path == "/api/history":
             qs = parse_qs(parsed.query)
             limit = int(qs.get("limit", ["20"])[0])
@@ -130,6 +175,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------ POST
     def do_POST(self) -> None:
         if self.path == "/api/scan":
+            if not self._request_allowed():
+                return
             self._handle_sync_scan()
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
@@ -138,9 +185,11 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
     def _handle_sse_scan(self, query_string: str) -> None:
         qs = parse_qs(query_string)
         raw_path = qs.get("path", ["."])[0]
-        # Resolve relative to project root (parent of scanner/server/)
-        _project_root = Path(__file__).parent.parent.parent
-        target_path = Path(raw_path) if Path(raw_path).is_absolute() else (_project_root / raw_path).resolve()
+        try:
+            target_path = _resolve_scan_path(raw_path)
+        except PermissionError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
+            return
         static_only = _parse_qs_bool(qs.get("static_only", ["true"])[0], default=True)
         deep = _parse_qs_bool(qs.get("deep", ["false"])[0])
         generate_patches = _parse_qs_bool(qs.get("generate_patches", ["false"])[0])
@@ -151,14 +200,12 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             generate_patches = False
         api_key = qs.get("api_key", [""])[0]
         if api_key:
-            import os
             os.environ["GROQ_API_KEY"] = api_key
 
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
         def sse(event: str, data: Any) -> None:
@@ -192,17 +239,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             sse("progress", {"phase": f"Discovered {total} files", "file": "", "pct": 15, "found": 0})
             time.sleep(0.1)
 
-            # Phase 2 — progress ticks while pretending to analyse files
-            for i, fpath in enumerate(files[:min(total, 20)]):
-                pct = 15 + int((i / max(total, 1)) * 50)
-                sse("progress", {"phase": "Static analysis", "file": str(fpath), "pct": pct, "found": 0})
-                time.sleep(0.04)
-
-            sse("progress", {"phase": "Running intelligence layer...", "file": "", "pct": 70, "found": 0})
-            time.sleep(0.1)
-
-            sse("progress", {"phase": "Scoring results...", "file": "", "pct": 85, "found": 0})
-            time.sleep(0.1)
+            sse("progress", {"phase": f"Analysing {total} files (static analysis, LLM, scoring)...", "file": "", "pct": 30, "found": 0})
 
             # Final scan run — attach a temporary handler so provider/tool log
             # activity (rate limits, failovers, static-tool errors) streams to
@@ -242,9 +279,11 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             payload = {}
 
-        raw_path = payload.get("path", ".")
-        _project_root = Path(__file__).parent.parent.parent
-        target_path = Path(raw_path) if Path(raw_path).is_absolute() else (_project_root / raw_path).resolve()
+        try:
+            target_path = _resolve_scan_path(str(payload.get("path", ".")))
+        except PermissionError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
+            return
         static_only = bool(payload.get("static_only", True))
         generate_patches = bool(payload.get("generate_patches", False))
         deep = bool(payload.get("deep", False))
@@ -255,7 +294,6 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             generate_patches = False
         api_key = str(payload.get("api_key", "")).strip()
         if api_key:
-            import os
             os.environ["GROQ_API_KEY"] = api_key
 
         if not target_path.exists() or not target_path.is_dir():
@@ -279,7 +317,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
 
 def run_server(port: int = 8000) -> None:
     """Launch the AegisScan production web server."""
-    server_address = ("", port)
+    server_address = ("127.0.0.1", port)
     httpd = HTTPServer(server_address, AegisScanRequestHandler)
     print(f"\n{'='*62}")
     print(f"  AEGISSCAN COMMAND CENTER")

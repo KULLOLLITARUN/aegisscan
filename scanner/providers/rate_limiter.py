@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from typing import Callable, TypeVar
 
@@ -18,7 +19,7 @@ T = TypeVar("T")
 
 class RateLimiter:
     """
-    Token-bucket rate limiter.
+    Token-bucket rate limiter (thread-safe).
 
     Args:
         requests_per_minute: Maximum requests allowed per 60-second window.
@@ -29,6 +30,7 @@ class RateLimiter:
         self.tokens = float(requests_per_minute if initial_tokens is None else max(0, min(initial_tokens, requests_per_minute)))
         self.refill_rate = requests_per_minute / 60.0  # tokens per second
         self.last_refill = time.monotonic()
+        self._lock = threading.Lock()
 
     def _refill(self) -> None:
         now = time.monotonic()
@@ -39,12 +41,13 @@ class RateLimiter:
     def acquire(self) -> None:
         """Block until a token is available."""
         while True:
-            self._refill()
-            if self.tokens >= 1.0:
-                self.tokens -= 1.0
-                return
-            sleep_time = (1.0 - self.tokens) / self.refill_rate
-            time.sleep(max(0.05, sleep_time))
+            with self._lock:
+                self._refill()
+                if self.tokens >= 1.0:
+                    self.tokens -= 1.0
+                    return
+                sleep_time = (1.0 - self.tokens) / self.refill_rate
+            time.sleep(max(0.05, sleep_time))   # sleep outside the lock
 
 
 def execute_with_backoff(

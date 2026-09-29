@@ -1,19 +1,21 @@
 """
 ProviderManager — single entry point for all LLM completions (V5).
 
-Manages provider failover (Groq -> Ollama -> Fallback), rate limiting,
+Manages provider failover (Groq -> OpenAI -> Ollama), rate limiting,
 exponential backoff with jitter, and aggregate telemetry tracking.
 """
 from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import Sequence
 
 from scanner.providers.base import LLMProvider, LLMResponse
 from scanner.providers.groq_provider import DEFAULT_MODEL, GroqProvider
 from scanner.providers.ollama_provider import OllamaProvider
+from scanner.providers.openai_provider import OpenAIProvider
 from scanner.providers.rate_limiter import RateLimiter, execute_with_backoff
 
 log = logging.getLogger(__name__)
@@ -29,12 +31,13 @@ class ProviderManager:
         if providers is not None:
             self._providers = list(providers)
         else:
-            self._providers = [GroqProvider(), OllamaProvider()]
+            self._providers = [GroqProvider(), OpenAIProvider(), OllamaProvider()]
 
         llm_rpm = int(os.environ.get("AEGISSCAN_LLM_RPM", "10"))
         self._rate_limiter = RateLimiter(requests_per_minute=llm_rpm, initial_tokens=1)
 
-        # Telemetry metrics
+        # Telemetry metrics (guarded by _lock: the auditor calls complete() from worker threads)
+        self._lock = threading.Lock()
         self.requests_count: int = 0
         self.total_input_tokens: int = 0
         self.total_output_tokens: int = 0
@@ -61,14 +64,13 @@ class ProviderManager:
     @property
     def default_model(self) -> str:
         avail = self.available_providers
-        if avail and avail[0].name == "groq":
-            return DEFAULT_MODEL
-        if avail and avail[0].name == "ollama":
-            return "llama3"
+        if avail:
+            return getattr(avail[0], "default_model", None) or DEFAULT_MODEL
         return DEFAULT_MODEL
 
     def _increment_rate_limit_hits(self) -> None:
-        self.rate_limit_hits += 1
+        with self._lock:
+            self.rate_limit_hits += 1
 
     def complete(
         self,
@@ -89,7 +91,8 @@ class ProviderManager:
 
         for idx, provider in enumerate(avail):
             if idx > 0:
-                self.fallback_triggered = True
+                with self._lock:
+                    self.fallback_triggered = True
                 log.info("ProviderManager: failing over to provider %s", provider.name)
 
             self._rate_limiter.acquire()
@@ -99,7 +102,10 @@ class ProviderManager:
                 def _do_call() -> LLMResponse:
                     return provider.complete(
                         messages=messages,
-                        model=resolved_model,
+                        # An explicit model applies to every provider; otherwise each
+                        # provider uses its own default (a Groq model id is meaningless
+                        # to OpenAI/Ollama during failover).
+                        model=model or getattr(provider, "default_model", None) or resolved_model,
                         max_tokens=max_tokens,
                         temperature=temperature,
                     )
@@ -111,10 +117,11 @@ class ProviderManager:
                 )
 
                 duration = time.monotonic() - t0
-                self.requests_count += 1
-                self.total_latency_seconds += duration
-                self.total_input_tokens += response.input_tokens
-                self.total_output_tokens += response.output_tokens
+                with self._lock:
+                    self.requests_count += 1
+                    self.total_latency_seconds += duration
+                    self.total_input_tokens += response.input_tokens
+                    self.total_output_tokens += response.output_tokens
 
                 if response.content:
                     return response
@@ -123,7 +130,8 @@ class ProviderManager:
 
             except Exception as exc:
                 duration = time.monotonic() - t0
-                self.total_latency_seconds += duration
+                with self._lock:
+                    self.total_latency_seconds += duration
                 log.warning("Provider %s failed with error: %s", provider.name, exc)
 
         return LLMResponse(content="", model=resolved_model, provider="none")

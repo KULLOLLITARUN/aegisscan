@@ -142,7 +142,6 @@ def generate_sarif(
                     "driver": {
                         "name": "AegisScan",
                         "version": "1.0.0",
-                        "informationUri": "https://github.com/your-org/aegisscan",
                         "organization": "AegisScan Security",
                         "rules": rules,
                         "properties": {
@@ -163,7 +162,7 @@ def generate_sarif(
                         "properties": {
                             "files_analyzed": scan_result.files_analyzed,
                             "files_discovered": scan_result.files_discovered,
-                            "duration_seconds": round(getattr(scan_result, 'duration_seconds', 0), 2),
+                            "duration_seconds": round(scan_result.scan_duration_seconds, 2),
                         },
                     }
                 ],

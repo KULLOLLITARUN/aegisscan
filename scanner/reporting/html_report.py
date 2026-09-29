@@ -48,6 +48,7 @@ _SOURCE_COLORS: dict[str, str] = {
     "semgrep":  "#58a6ff",
     "gitleaks": "#ff4444",
     "llm":      "#a371f7",
+    "aegis-opt": "#3fb950",
 }
 
 

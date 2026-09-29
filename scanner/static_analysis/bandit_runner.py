@@ -61,7 +61,7 @@ def _infer_category(test_id: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def run_bandit(target: Path) -> list[Finding]:
+def run_bandit(target: Path, exclude_dirs: frozenset[str] = frozenset()) -> list[Finding]:
     """
     Run Bandit on *target* directory and return a normalized list of Findings.
 
@@ -73,7 +73,8 @@ def run_bandit(target: Path) -> list[Finding]:
         log.warning("Bandit not found on PATH or in venv — skipping")
         return []
 
-    _EXCLUDE_DIRS = [".venv", "venv", "node_modules", "__pycache__", "dist", ".git", "build", "tests", "examples"]
+    # tests/ and examples/ are scanned by default; opt out via .aegisscan.toml.
+    _EXCLUDE_DIRS = [".venv", "venv", "node_modules", "__pycache__", "dist", ".git", "build", *sorted(exclude_dirs)]
     exclude_str = ",".join(
         str(target / d) for d in _EXCLUDE_DIRS if (target / d).exists()
     )

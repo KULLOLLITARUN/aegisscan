@@ -36,6 +36,7 @@ _SOURCE_PRIORITY: dict[str, int] = {
     "bandit":   1,
     "semgrep":  2,
     "gitleaks": 3,
+    "aegis-opt": 4,
 }
 
 

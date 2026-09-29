@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -63,6 +65,14 @@ def _confidence_label(confidence: float) -> str:
     return "suppressed"
 
 
+def _max_workers() -> int:
+    """Worker threads for the LLM pass (env AEGISSCAN_LLM_WORKERS, default 4)."""
+    try:
+        return max(1, int(os.environ.get("AEGISSCAN_LLM_WORKERS", "4")))
+    except ValueError:
+        return 4
+
+
 class LLMAuditor:
     """
     Orchestrates the LLM reasoning pass for a set of code chunks.
@@ -104,30 +114,37 @@ class LLMAuditor:
             return []
 
         all_llm_findings: list[Finding] = []
-        triggered = 0
-        skipped = 0
         suppressed = 0
 
+        work: list[tuple[CodeChunk, list[Finding]]] = []
         for chunk in chunks:
-            chunk_static = self._trigger.get_chunk_findings(chunk, static_findings)
+            if self._trigger.should_analyze(chunk, static_findings, deep=deep):
+                work.append((chunk, self._trigger.get_chunk_findings(chunk, static_findings)))
+        triggered = len(work)
+        skipped = len(chunks) - triggered
 
-            if not self._trigger.should_analyze(chunk, static_findings, deep=deep):
-                skipped += 1
-                continue
-
-            triggered += 1
+        def _process(item: tuple[CodeChunk, list[Finding]]) -> tuple[list[Finding], int]:
+            chunk, chunk_static = item
             findings = self._analyze_one(chunk, chunk_static)
-
             kept = [f for f in findings if f.confidence >= SUPPRESSION_THRESHOLD]
-            suppressed += len(findings) - len(kept)
-
             if self._generate_patches:
                 from scanner.llm.patcher import generate_patch_for_finding
                 for f in kept:
                     if f.severity in (Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM):
                         f.fix_patch = generate_patch_for_finding(f, self._manager)
+            return kept, len(findings) - len(kept)
 
+        # Chunks are independent, so overlap the network waits. Pacing is still
+        # enforced globally by the ProviderManager's (thread-safe) rate limiter.
+        workers = max(1, min(_max_workers(), len(work)))
+        if workers == 1:
+            results = [_process(item) for item in work]
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                results = list(pool.map(_process, work))   # map preserves chunk order
+        for kept, n_suppressed in results:
             all_llm_findings.extend(kept)
+            suppressed += n_suppressed
 
         log.info(
             "LLMAuditor: %d chunks triggered, %d skipped, %d LLM findings kept, %d suppressed",

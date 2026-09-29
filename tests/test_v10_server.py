@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from io import BytesIO
 from pathlib import Path
+
+import pytest
 from unittest.mock import MagicMock
 
 from main import _build_parser
@@ -72,7 +74,8 @@ def test_server_history_api_route() -> None:
     assert isinstance(parsed, list)
 
 
-def test_server_scan_api_route(tmp_path: Path) -> None:
+def test_server_scan_api_route(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("AEGISSCAN_ALLOWED_ROOTS", str(tmp_path))
     handler = _create_mock_request_handler(
         "POST", "/api/scan", body={"path": str(tmp_path), "static_only": True}
     )
@@ -82,3 +85,32 @@ def test_server_scan_api_route(tmp_path: Path) -> None:
     parsed = json.loads(output)
     assert "scan_id" in parsed
     assert "security_score" in parsed
+
+
+def test_scan_rejects_path_outside_allowed_roots(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("AEGISSCAN_ALLOWED_ROOTS", raising=False)
+    handler = _create_mock_request_handler("POST", "/api/scan", body={"path": str(tmp_path)})
+    handler.do_POST()
+    handler.send_response.assert_called_with(403)
+
+
+def test_scan_rejects_parent_traversal(monkeypatch) -> None:
+    monkeypatch.delenv("AEGISSCAN_ALLOWED_ROOTS", raising=False)
+    handler = _create_mock_request_handler("POST", "/api/scan", body={"path": "../../.."})
+    handler.do_POST()
+    handler.send_response.assert_called_with(403)
+
+
+@pytest.mark.parametrize("header,value", [("Origin", "https://evil.example"), ("Host", "evil.example:8000")])
+def test_api_rejects_foreign_origin_or_host(header: str, value: str) -> None:
+    handler = _create_mock_request_handler("GET", "/api/history")
+    handler.headers = {header: value}
+    handler.do_GET()
+    handler.send_response.assert_called_with(403)
+
+
+def test_api_sends_no_cors_wildcard() -> None:
+    handler = _create_mock_request_handler("GET", "/api/history")
+    handler.do_GET()
+    sent = [c.args[0] for c in handler.send_header.call_args_list]
+    assert "Access-Control-Allow-Origin" not in sent

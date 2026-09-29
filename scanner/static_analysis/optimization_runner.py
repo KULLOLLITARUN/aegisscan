@@ -4,7 +4,8 @@ OptimizationRunner — deterministic Python performance checks built on ``ast``.
 Closes the gap between the plan's "optimization scanner" claim and what the
 security tools emit. Rules are intentionally conservative (high precision):
 
-  OPT001  DB / network call inside a loop (N+1 pattern)
+  OPT001  DB / network call inside a loop (N+1 pattern): DB-API cursors, Django
+          ``Model.objects`` chains, SQLAlchemy sessions, requests/httpx-style clients
   OPT002  String concatenation with ``+=`` inside a loop (quadratic copying)
   OPT003  Nested loops over the same collection (O(n^2))
   OPT004  ``re.<fn>(literal, ...)`` inside a loop (pattern re-resolved each pass)
@@ -27,22 +28,123 @@ RULE_SOURCE = "aegis-opt"
 _SKIP_DIRS = {".venv", "venv", "node_modules", "__pycache__", "dist", ".git", "build", "site-packages"}
 _MAX_FILE_BYTES = 1_000_000
 
-# Method names that almost always mean a round trip to a DB or remote service.
-_DB_METHODS = {"execute", "executemany", "fetchone", "fetchall", "fetchmany", "query"}
-_HTTP_OWNERS = {"requests", "httpx", "session", "client"}
-_HTTP_METHODS = {"get", "post", "put", "delete", "patch", "head"}
+# Method names that almost always mean a round trip to a DB (DB-API cursors / connections).
+_DB_METHODS = {"execute", "executemany", "fetchone", "fetchall", "fetchmany"}
+# Owners whose ``.query()`` / ``.get(Model, id)`` / ``.scalars()`` are ORM sessions, not arbitrary objects.
+_DB_OWNERS = {"db", "session", "sess", "conn", "connection", "cursor", "cur", "engine", "database"}
+_DB_OWNER_SUFFIXES = ("_session", "_db", "_conn", "_connection", "_cursor")
+_SQLA_SESSION_METHODS = {"scalar", "scalars"}
+# Django managers: chains rooted at ``Model.objects`` / ``_default_manager``.
+_DJANGO_MANAGERS = {"objects", "_default_manager"}
+_DJANGO_QUERY_METHODS = {
+    "get", "filter", "exclude", "all", "first", "last", "count", "exists", "aggregate",
+    "create", "get_or_create", "update_or_create", "earliest", "latest", "in_bulk", "delete", "update",
+}
+# HTTP clients. Unambiguous owners are always network; ambiguous ones (``session``, ``client``, ...)
+# need URL-like evidence because ``session.get("key")`` is usually a dict-style lookup.
+_HTTP_OWNERS = {"requests", "httpx", "urllib3", "aiohttp"}
+_HTTP_AMBIGUOUS_OWNERS = {"session", "client", "http", "http_client", "api", "api_client"}
+_HTTP_AMBIGUOUS_SUFFIXES = ("_client", "_http")
+_HTTP_METHODS = {"get", "post", "put", "delete", "patch", "head", "request"}
+_URL_FUNCS = {"urlopen", "urlretrieve"}
+_URL_KEYWORDS = {"params", "json", "data", "headers", "timeout", "allow_redirects"}
 _RE_FUNCS = {"match", "search", "sub", "findall", "fullmatch", "split", "finditer"}
 
+_FIX_SQL = "Batch the work: one query with IN (...)/JOIN, executemany, or a bulk/concurrent request."
+_FIX_DJANGO = (
+    "Fetch once outside the loop: filter(id__in=...) plus a dict, select_related()/prefetch_related(), "
+    "or annotate()/bulk_create()/bulk_update()."
+)
+_FIX_SQLA = "Load in one query (IN (...), joinedload/selectinload) or use bulk operations instead of per-row queries."
 
-def _call_kind(node: ast.Call) -> str | None:
+
+def _chain(node: ast.expr) -> list[str]:
+    """Names along a call/attribute chain, root first: ``a.b(c).d()`` -> ['a', 'b', 'd']."""
+    names: list[str] = []
+    while True:
+        if isinstance(node, ast.Call):
+            node = node.func
+        elif isinstance(node, ast.Attribute):
+            names.append(node.attr)
+            node = node.value
+        elif isinstance(node, ast.Name):
+            names.append(node.id)
+            break
+        else:
+            break
+    return names[::-1]
+
+
+def _is_db_owner(name: str) -> bool:
+    n = name.lower()
+    return n in _DB_OWNERS or n.endswith(_DB_OWNER_SUFFIXES)
+
+
+def _is_ambiguous_http_owner(name: str) -> bool:
+    n = name.lower()
+    return n in _HTTP_AMBIGUOUS_OWNERS or n.endswith(_HTTP_AMBIGUOUS_SUFFIXES)
+
+
+def _looks_like_url_call(node: ast.Call) -> bool:
+    """URL-like first argument or HTTP-only keyword arguments."""
+    if any(kw.arg in _URL_KEYWORDS for kw in node.keywords):
+        return True
+    if not node.args:
+        return False
+    arg = node.args[0]
+    if isinstance(arg, ast.JoinedStr):
+        return True
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        return arg.value.startswith(("http://", "https://", "/"))
+    if isinstance(arg, ast.BinOp) and isinstance(arg.op, (ast.Add, ast.Mod)):
+        return any(isinstance(s, ast.Constant) and isinstance(s.value, str) for s in (arg.left, arg.right))
+    leaf = arg.attr if isinstance(arg, ast.Attribute) else arg.id if isinstance(arg, ast.Name) else ""
+    leaf = leaf.lower()
+    return leaf in {"url", "uri", "endpoint"} or leaf.endswith(("_url", "_uri", "_endpoint"))
+
+
+def _call_kind(node: ast.Call) -> tuple[str, float, str] | None:
+    """Classify a call as a per-iteration round trip: (kind, confidence, suggested_fix)."""
     func = node.func
+    if isinstance(func, ast.Name):
+        if func.id in _URL_FUNCS:
+            return "network", 0.65, _FIX_SQL
+        return None
     if not isinstance(func, ast.Attribute):
         return None
-    if func.attr in _DB_METHODS:
-        return "database"
-    owner = func.value
-    if func.attr in _HTTP_METHODS and isinstance(owner, ast.Name) and owner.id.lower() in _HTTP_OWNERS:
-        return "network"
+
+    names = _chain(node)
+    method = func.attr
+    owner = names[-2] if len(names) >= 2 else ""
+    upstream = names[:-1]
+
+    if method in _DB_METHODS:
+        return "database", 0.65, _FIX_SQL
+    if method in _URL_FUNCS:
+        return "network", 0.65, _FIX_SQL
+
+    # Django ORM: Model.objects.<...> chains
+    manager_at = next((i for i, n in enumerate(upstream) if n in _DJANGO_MANAGERS), None)
+    # ``self.objects`` is usually a plain attribute, not a Django manager
+    if manager_at is not None and (manager_at, upstream[0]) != (1, "self") and method in _DJANGO_QUERY_METHODS:
+        return "database", 0.6, _FIX_DJANGO
+
+    # SQLAlchemy-style: session.query(...).<...>, session.scalars(...), session.get(Model, pk)
+    for i, name in enumerate(names[:-1]):
+        if name == "query" and i > 0 and _is_db_owner(names[i - 1]):
+            return "database", 0.6, _FIX_SQLA
+    if method == "query" and _is_db_owner(owner):
+        return "database", 0.6, _FIX_SQLA
+    if method in _SQLA_SESSION_METHODS and _is_db_owner(owner):
+        return "database", 0.6, _FIX_SQLA
+    if method == "get" and _is_db_owner(owner) and len(node.args) >= 2:   # session.get(Model, pk)
+        return "database", 0.6, _FIX_SQLA
+
+    if method in _HTTP_METHODS and owner:
+        if owner.lower() in _HTTP_OWNERS:
+            return "network", 0.65, _FIX_SQL
+        if _is_ambiguous_http_owner(owner) and _looks_like_url_call(node):
+            return "network", 0.6, _FIX_SQL
     return None
 
 
@@ -177,16 +279,17 @@ class _Visitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         if self._in_loop:
-            kind = _call_kind(node)
-            if kind:
+            hit = _call_kind(node)
+            if hit:
+                kind, confidence, fix = hit
                 if self._io_reported:
                     self.generic_visit(node)
                     return
                 self._io_reported = True
                 self._add(
-                    node, f"{kind.capitalize()} call inside loop (N+1)", Severity.MEDIUM, 0.65,
+                    node, f"{kind.capitalize()} call inside loop (N+1)", Severity.MEDIUM, confidence,
                     f"A {kind} call is issued once per iteration, multiplying latency by the loop size.",
-                    "Batch the work: one query with IN (...)/JOIN, executemany, or a bulk/concurrent request.",
+                    fix,
                 )
             elif _is_re_literal_call(node):
                 self._add(

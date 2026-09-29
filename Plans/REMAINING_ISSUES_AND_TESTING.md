@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-09-29. Branch: `fix/server-hardening` (4 commits on top of the `main` baseline, not merged)._
-_Test status: 256 passed, 4 skipped, coverage 89% (gate: 75%)._
+_Test status: 288 passed, 4 skipped, coverage 89% (gate: 75%)._
 
 ---
 
@@ -20,6 +20,7 @@ _Test status: 256 passed, 4 skipped, coverage 89% (gate: 75%)._
 | Languages | Tree-sitter chunking for Go, Java, PHP, C# (plus Python/JS/TS) |
 | Coverage | `tests/test_v13_coverage.py` (34 tests, mocked): SSE stream, error/strict-privacy paths, log forwarding, sync-scan errors, Semgrep and Gitleaks runners incl. fallbacks. `semgrep_runner` 99%, `gitleaks_runner` 89% |
 | Lint | `ruff` added (`[tool.ruff]` in pyproject: E4/E7/E9, F, B, I; `examples/` and `ui/` excluded; `main.py` ignores E402/E701 by design). Baseline cleaned (unused imports, import order, f-strings, ambiguous `l`, frozen-model test now expects `ValidationError`); `manager.py` binds the provider explicitly in the retry closure. CI runs `ruff check .` before tests. Locally: `python -m ruff check .` (inside the venv) |
+| Optimizer ORM heuristics | OPT001 is chain-aware: Django `Model.objects...`, SQLAlchemy `session.query(...)`/`get(Model, pk)`/`scalars`, network calls via `self.client`/`urlopen`. `.query()` only counts on DB-like owners; ambiguous HTTP owners (`session`, `client`) need URL-like evidence, so `session.get('key')` and `parser.query()` are no longer flagged. ORM hits use confidence 0.6 and ORM-specific fixes. `tests/test_v15_optimizer_orm.py` (32 tests). Lazy related-manager access (`user.orders.all()`) is still undetectable statically |
 | Progress | `main.run(progress=cb)` calls `cb(phase, pct, detail)` per phase; static tools and each LLM chunk report too (`run_all_tools(progress=)`, `analyze_chunks(progress=)`). SSE forwards them; the server no longer pre-crawls or fakes phases. Callback errors are swallowed. `tests/test_v14_progress.py` (7 tests) |
 | Misc | History uses `executemany`; SARIF reports real duration, placeholder URL removed; CI installs Gitleaks binary + runs tests with coverage gate; packaging limited to `scanner*` with package-data |
 
@@ -34,7 +35,6 @@ _Test status: 256 passed, 4 skipped, coverage 89% (gate: 75%)._
 ### P1 — real gaps
 4. **SQL has no grammar.** `.sql` files use the generic chunker. No maintained tree-sitter SQL package was found/trusted. Options: evaluate `tree-sitter-sql` variants, or add a statement-splitting chunker.
 5. **Optimizer is Python-only.** JS/TS/Go/Java get performance signal only from Semgrep rules (name-matched in `semgrep_runner._infer_category`) and the LLM. Consider tree-sitter-based equivalents of OPT001–OPT004.
-6. **Optimizer heuristics are conservative and name-based.** `_DB_METHODS` (`execute`, `fetchone`, `query`, …) and `_HTTP_OWNERS` (`requests`, `httpx`, `session`, `client`) can miss ORMs (`.filter()`, `.objects.get()`) and flag non-DB `.query()` methods. Tune with real-repo runs.
 7. **Benchmark is small and self-authored.** `examples/slow_python` (8 expected issues) + `examples/tricky_clean_python` give P/R = 1.0 by construction. Plan §7 wants confidence calibration, JSON validity rate and latency per chunk measured on a larger labelled set (ideally real CVE-style samples for the security side too).
 8. **No type-check gate.** `ruff` is now gated in CI (see section 1) but `mypy` is not. Adding it means fixing the existing type errors first; widen the ruff rule set (UP, SIM, BLE) deliberately later.
 9. **Coverage hot spots (remaining):** `git_diff.py` (~61%), `ollama_provider.py` (~70%), `patcher.py` (~67%). `server/app.py`, `semgrep_runner.py` and `gitleaks_runner.py` are now covered (see section 1).
@@ -74,6 +74,7 @@ Always use the project venv. From the project root (`D:\AI_Projects\AI-Driven_Wo
 | Languages, concurrency, optimizer P/R, Groq failover, SARIF, history batch, live providers | `pytest tests/test_v12_remaining.py` |
 | SSE path, Semgrep/Gitleaks runners | `pytest tests/test_v13_coverage.py` |
 | Progress callback (run, static tools, auditor, SSE) | `pytest tests/test_v14_progress.py` |
+| Optimizer ORM heuristics | `pytest tests/test_v15_optimizer_orm.py` |
 
 ### Live-provider smoke tests (opt-in)
 `tests/test_v12_remaining.py::test_live_*` are skipped unless credentials/daemon exist:

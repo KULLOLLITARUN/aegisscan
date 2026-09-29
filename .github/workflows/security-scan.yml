@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: scanner/server/ui
+        working-directory: ui
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -69,7 +69,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: scanner/server/ui/package-lock.json
+          cache-dependency-path: ui/package-lock.json
 
       - name: Install UI dependencies
         run: npm ci

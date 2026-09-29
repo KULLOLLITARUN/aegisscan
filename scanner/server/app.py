@@ -27,7 +27,7 @@ load_dotenv()
 
 log = logging.getLogger(__name__)
 
-# React Vite build output lives one level up from ui/
+# React Vite build output; the source lives in <repo root>/ui and builds into this package
 _DIST_DIR = Path(__file__).parent / "dist"
 _INDEX_HTML = _DIST_DIR / "index.html"
 
@@ -42,7 +42,7 @@ def _ui_build_hint() -> str | None:
         return None
     return (
         "React dashboard build not found - serving the basic fallback page.\n"
-        "  Build it once with: cd scanner/server/ui && npm ci && npm run build"
+        "  Build it once with: cd ui && npm ci && npm run build"
     )
 
 
@@ -177,7 +177,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             if legacy.exists():
                 self._serve_static(legacy)
             else:
-                body = b"<h1>AegisScan - run npm run build in scanner/server/ui/</h1>"
+                body = b"<h1>AegisScan - run npm run build in ui/</h1>"
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "text/html")
                 self.send_header("Content-Length", str(len(body)))

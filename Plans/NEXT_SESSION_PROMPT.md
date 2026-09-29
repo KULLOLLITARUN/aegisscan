@@ -24,7 +24,7 @@ You are continuing work on AegisScan, an AI-driven workspace security & optimiza
 - Confirm with me before anything outward-facing or hard to reverse: pushing, merging, deleting files, spending API quota beyond a single small smoke call, or touching `.env`.
 - Never print or commit secrets. `.env` is git-ignored and must stay that way.
 - Preserve CRLF line endings in existing files. Prefer Write/Edit tools over long shell heredocs (Git Bash parsing fails on complex quoting).
-- Scope searches to `scanner/`, `tests/`, `examples/` — `.venv` and `scanner/server/ui/node_modules` are huge.
+- Scope searches to `scanner/`, `tests/`, `examples/` — `.venv` and `ui/node_modules` are huge.
 - Do not claim something works unless you ran it; report failing tests with their output.
 - Keep the plan's design rules intact (see AEGISSCAN_PLAN.md §2), especially provider independence and redaction before any external LLM call.
 

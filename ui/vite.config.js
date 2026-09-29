@@ -13,7 +13,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../dist',
+    // Must land inside the Python package: pyproject package-data ships scanner/server/dist/**
+    outDir: '../scanner/server/dist',
     emptyOutDir: true,
   },
 })

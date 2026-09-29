@@ -69,14 +69,14 @@ fail_under = 75
 [tool.mypy]
 python_version = "3.11"
 files = ["scanner", "main.py"]
-exclude = ["scanner/server/ui", "scanner/server/dist"]
+exclude = ["scanner/server/dist"]
 # tree-sitter grammars, semgrep etc. ship without stubs
 ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py311"
 line-length = 120
-extend-exclude = ["examples", "scanner/server/ui", "scanner/server/dist"]
+extend-exclude = ["examples", "ui", "scanner/server/dist"]
 
 [tool.ruff.lint]
 # Conservative baseline: real bugs and hygiene only. Widen deliberately, never by accident.

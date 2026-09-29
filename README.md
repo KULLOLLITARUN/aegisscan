@@ -97,10 +97,10 @@ aegisscan --benchmark
 The React dashboard's build output (`scanner/server/dist`) is **not committed**. Build it once, then start the server:
 
 ```bash
-cd scanner/server/ui
+cd ui
 npm ci
-npm run build          # writes scanner/server/dist
-cd ../../..
+npm run build          # writes scanner/server/dist (inside the Python package, so wheels include it)
+cd ..
 aegisscan --server --port 8000
 ```
 

@@ -28,7 +28,7 @@ crawl → classify → chunk → static analysis → LLM reasoning
 
 ### 1. Crawl — `scanner/ingestion/crawler.py`
 
-`WorkspaceCrawler` walks the target directory with `pathlib`, honoring `.gitignore` rules (including nested ones) so it never touches `node_modules/`, build artifacts, or anything you've already excluded. If `--changed-only` is passed, [`scanner/ingestion/git_diff.py`](scanner/ingestion/git_diff.py) intersects the discovered files with `git status` (modified/staged/untracked) so CI only pays for what changed.
+`WorkspaceCrawler` walks the target directory with `pathlib`, honoring `.gitignore` rules (including nested ones) so it never touches `node_modules/`, build artifacts, or anything you've already excluded. If `--changed-only` is passed, [`scanner/ingestion/git_diff.py`](scanner/ingestion/git_diff.py) intersects the discovered files with `git status` and `git diff HEAD` (modified/staged/untracked), so chunking, the LLM pass and the reported findings cover only what changed. The static tools (Bandit, Semgrep, Gitleaks) still scan the whole tree and their findings in unchanged files are then dropped, so this saves LLM cost and report noise but not static-analysis time. Outside a git repository, or if git fails, the whole tree is scanned.
 
 ### 2. Classify — `scanner/ingestion/classifier.py`
 

@@ -313,11 +313,10 @@ def run(
     discovered_files = crawl.discovered
     _progress("Discovered files", 10, f"{len(discovered_files)} files")
 
-    # Incremental scan filter (V6)
-    if changed_only:
-        changed = get_changed_files(path)
-        if changed is not None:
-            discovered_files = [f for f in discovered_files if f.resolve() in changed]
+    # Incremental scan filter (V6). None = not a git repo / git unavailable -> scan everything.
+    changed: set[Path] | None = get_changed_files(path) if changed_only else None
+    if changed is not None:
+        discovered_files = [f for f in discovered_files if f.resolve() in changed]
 
     # ---- 2. Classify ----
     classifier = FileClassifier()
@@ -348,6 +347,10 @@ def run(
         path.resolve(),
         progress=lambda tool: _progress("Static analysis", 30, tool),
     )
+    if changed is not None:
+        # The tools scan the whole tree, so drop findings in files that did not change; otherwise
+        # --changed-only reports (and a CI gate fails on) every pre-existing issue in the repo.
+        static_findings = [f for f in static_findings if f.file_path.resolve() in changed]
 
     # ---- 5. LLM reasoning ----
     llm_findings: list[Finding] = []

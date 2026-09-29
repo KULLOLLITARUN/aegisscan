@@ -1,0 +1,17 @@
+# The repo is LF in the index and CI runs on Linux. Pin LF for text files so a Windows
+# core.autocrlf setting cannot introduce CRLF churn or "LF will be replaced by CRLF" noise.
+* text=auto eol=lf
+
+# Windows-only scripts must stay CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never touch line endings
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

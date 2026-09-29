@@ -10,7 +10,8 @@ security tools emit. Rules are intentionally conservative (high precision):
   OPT003  Nested loops over the same collection (O(n^2))
   OPT004  ``re.<fn>(literal, ...)`` inside a loop (pattern re-resolved each pass)
 
-Only Python is covered; other languages rely on Semgrep / the LLM.
+Python is checked here with ``ast``; JavaScript/TypeScript by ``optimization_js`` (tree-sitter).
+Other languages rely on Semgrep / the LLM.
 Findings use ``rule_source="aegis-opt"`` and category ``performance``.
 """
 from __future__ import annotations
@@ -315,14 +316,21 @@ def analyze_file(path: Path) -> list[Finding]:
 
 
 def run_optimizer(target: Path, exclude_dirs: set[str] | None = None) -> list[Finding]:
-    """Analyze every ``.py`` file under *target*; never raises."""
+    """Analyze every Python and JS/TS file under *target*; never raises."""
+    from scanner.static_analysis.optimization_js import JS_EXTENSIONS, analyze_js_file  # noqa: PLC0415
+
     skip = _SKIP_DIRS | (exclude_dirs or set())
     findings: list[Finding] = []
-    for path in sorted(target.rglob("*.py")):
+    for path in sorted(target.rglob("*")):
+        suffix = path.suffix.lower()
+        is_py = suffix == ".py"
+        is_js = suffix in JS_EXTENSIONS and not path.name.lower().endswith((".min.js", ".d.ts"))
+        if not (is_py or is_js) or not path.is_file():
+            continue
         if skip.intersection(path.relative_to(target).parts[:-1]):
             continue
         try:
-            findings.extend(analyze_file(path))
+            findings.extend(analyze_file(path) if is_py else analyze_js_file(path))
         except Exception as exc:  # defensive: one bad file must not kill the scan
             log.warning("Optimizer failed on %s: %s", path, exc)
     return findings

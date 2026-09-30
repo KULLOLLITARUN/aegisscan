@@ -15,6 +15,9 @@ Deduplication strategy (V3):
   When duplicates are found, the one with the HIGHEST confidence is kept.
   If confidence is equal, source priority applies:
     llm > bandit > semgrep > gitleaks
+  Exception: when the winner is an LLM finding and a static finding is within
+  STATIC_LOCATION_MARGIN of its confidence, the static one is kept, because its
+  location is exact while the LLM's is inferred.
 
   This is the V3 baseline dedup. V5 will add ML-assisted similarity matching.
 
@@ -34,6 +37,9 @@ log = logging.getLogger(__name__)
 
 # Lines within this distance are considered "same area" for dedup
 PROXIMITY_LINES: int = 5
+
+# A static finding this close in confidence to an LLM finding wins the cluster (exact location)
+STATIC_LOCATION_MARGIN: float = 0.10
 
 # Source priority for tie-breaking (higher index = lower priority)
 _SOURCE_PRIORITY: dict[str, int] = {
@@ -113,6 +119,22 @@ def _can_join(finding: Finding, cluster: list[Finding]) -> bool:
     return all(m.rule_source != finding.rule_source or _same_issue(m, finding) for m in cluster)
 
 
+def _pick_best(cluster: list[Finding]) -> Finding:
+    """Highest confidence wins, then source priority; but a static tool's location beats an LLM's.
+
+    The LLM only sees a chunk of code and its line numbers are located after the fact, so when
+    a static finding is within STATIC_LOCATION_MARGIN of the best LLM finding we keep the static
+    one: its file:line is exact, the LLM's may be a few lines off.
+    """
+    ranked = sorted(cluster, key=lambda f: (-f.confidence, _source_priority(f)))
+    best = ranked[0]
+    if best.rule_source == "llm":
+        for f in ranked[1:]:
+            if f.rule_source != "llm" and f.confidence >= best.confidence - STATIC_LOCATION_MARGIN:
+                return f
+    return best
+
+
 def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
     """
     Remove near-duplicate findings and return (deduped_list, n_suppressed).
@@ -143,12 +165,7 @@ def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
             kept.append(cluster[0])
             continue
 
-        # Sort: highest confidence first, then by source priority
-        best = sorted(
-            cluster,
-            key=lambda f: (-f.confidence, _source_priority(f)),
-        )[0]
-        kept.append(best)
+        kept.append(_pick_best(cluster))
 
     n_suppressed = len(findings) - len(kept)
     if n_suppressed:

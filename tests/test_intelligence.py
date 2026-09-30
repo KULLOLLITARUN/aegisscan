@@ -376,3 +376,32 @@ def test_dedup_merges_across_sources_but_not_into_a_cluster_with_a_same_source_s
     # llm merges with the first bandit hit; the second bandit hit stays separate
     assert n_removed == 1
     assert sorted(f.line_start for f in deduped) == [6, 11]
+
+
+def test_dedup_prefers_static_location_when_confidence_is_close() -> None:
+    llm = _finding(line_start=8, line_end=8, rule_source="llm", confidence=0.90)
+    bandit = _finding(line_start=10, line_end=10, rule_source="bandit", confidence=0.85)
+    deduped, _ = deduplicate([llm, bandit])
+    assert [f.rule_source for f in deduped] == ["bandit"]
+    assert deduped[0].line_start == 10
+
+
+def test_dedup_prefers_static_on_equal_confidence() -> None:
+    llm = _finding(line_start=8, line_end=8, rule_source="llm", confidence=0.85)
+    semgrep = _finding(line_start=10, line_end=10, rule_source="semgrep", confidence=0.85)
+    deduped, _ = deduplicate([llm, semgrep])
+    assert [f.rule_source for f in deduped] == ["semgrep"]
+
+
+def test_dedup_llm_still_wins_when_far_more_confident() -> None:
+    llm = _finding(line_start=8, line_end=8, rule_source="llm", confidence=0.95)
+    bandit = _finding(line_start=10, line_end=10, rule_source="bandit", confidence=0.60)
+    deduped, _ = deduplicate([bandit, llm])
+    assert [f.rule_source for f in deduped] == ["llm"]
+
+
+def test_dedup_static_more_confident_than_llm_still_wins() -> None:
+    llm = _finding(line_start=8, line_end=8, rule_source="llm", confidence=0.70)
+    bandit = _finding(line_start=10, line_end=10, rule_source="bandit", confidence=0.85)
+    deduped, _ = deduplicate([llm, bandit])
+    assert [f.rule_source for f in deduped] == ["bandit"]

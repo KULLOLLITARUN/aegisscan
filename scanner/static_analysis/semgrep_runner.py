@@ -55,6 +55,9 @@ _SEMGREP_CONFIDENCE: dict[str, float] = {
 
 _SEMGREP_CONFIGS = ["p/python", "p/javascript", "p/owasp-top-ten", "p/security-audit", "p/nodejsscan"]
 
+#: AegisScan's own rules (bundled with the package); they run offline alongside the registry packs.
+_LOCAL_RULES = Path(__file__).parent / "rules" / "js_security.yml"
+
 
 def _infer_category(rule_id: str) -> str:
     rl = rule_id.lower()
@@ -84,6 +87,8 @@ def run_semgrep(target: Path) -> list[Finding]:
     config_flags = []
     for cfg in _SEMGREP_CONFIGS:
         config_flags += ["--config", cfg]
+    if _LOCAL_RULES.is_file():
+        config_flags += ["--config", str(_LOCAL_RULES)]
 
     cmd = [
         semgrep_bin, "scan",
@@ -142,7 +147,7 @@ def _normalize(item: dict) -> Finding:
     return Finding(
         file_path=Path(item["path"]),
         issue_type=meta.get("message", "Semgrep finding")[:120],
-        category=_infer_category(item.get("check_id", "")),
+        category=meta.get("metadata", {}).get("aegis_category") or _infer_category(item.get("check_id", "")),
         severity=_SEMGREP_SEVERITY_MAP.get(sev, Severity.INFO),
         confidence=_SEMGREP_CONFIDENCE.get(sev, 0.50),
         line_start=int(start.get("line", 1)),

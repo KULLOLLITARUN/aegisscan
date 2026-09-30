@@ -52,6 +52,7 @@ include = ["scanner*"]
 
 [tool.setuptools.package-data]
 "scanner.server" = ["templates/*.html", "dist/**/*"]
+"scanner.static_analysis" = ["rules/*.yml"]
 "scanner.storage" = ["schema.sql"]
 
 [tool.pytest.ini_options]

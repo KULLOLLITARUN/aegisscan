@@ -1,0 +1,78 @@
+# AegisScan's own JavaScript/TypeScript rules for dangerous sinks the registry packs only flag
+# when the value is visibly tainted (req.body etc.). Here any non-literal argument is enough,
+# because a function parameter reaching these sinks is exactly the code review should look at.
+rules:
+  - id: aegis-js-eval-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "eval() of a non-literal value allows arbitrary code execution"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern: eval($X)
+      - pattern-not: eval("...")
+
+  - id: aegis-js-function-constructor-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "new Function() built from a non-literal value allows arbitrary code execution"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern-either:
+          - pattern: new Function(..., $X)
+          - pattern: Function(..., $X)
+      - pattern-not: new Function(..., "...")
+      - pattern-not: Function(..., "...")
+
+  - id: aegis-js-vm-exec-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "vm code execution is not a security boundary; a non-literal script allows code execution"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern-either:
+          - pattern: $VM.runInNewContext($X, ...)
+          - pattern: $VM.runInContext($X, ...)
+          - pattern: $VM.runInThisContext($X, ...)
+          - pattern: new $VM.Script($X, ...)
+      - pattern-not: $VM.$FN("...", ...)
+      - pattern-not: new $VM.Script("...", ...)
+      - metavariable-regex:
+          metavariable: $VM
+          regex: ^(vm|require\(['"]vm['"]\))$
+
+  - id: aegis-js-document-write-xss
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "document.write() with a non-literal value can inject unsanitised HTML (XSS)"
+    metadata: {aegis_category: xss}
+    patterns:
+      - pattern-either:
+          - pattern: document.write($X)
+          - pattern: document.writeln($X)
+      - pattern-not: document.write("...")
+      - pattern-not: document.writeln("...")
+
+  - id: aegis-js-innerhtml-xss
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Assigning a non-literal value to innerHTML/outerHTML can inject unsanitised HTML (XSS)"
+    metadata: {aegis_category: xss}
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $X
+          - pattern: $EL.outerHTML = $X
+      - pattern-not: $EL.innerHTML = "..."
+      - pattern-not: $EL.outerHTML = "..."
+
+  - id: aegis-js-path-traversal-join
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "A function parameter is joined into a filesystem path and read without a containment check (path traversal)"
+    metadata: {aegis_category: path_traversal}
+    pattern: |
+      function $F(..., $A, ...) {
+        ...
+        $P = path.join(..., $A, ...);
+        ...
+        $FS.$READ($P, ...);
+      }

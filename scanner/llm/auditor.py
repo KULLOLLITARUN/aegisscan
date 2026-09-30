@@ -66,6 +66,48 @@ def _confidence_label(confidence: float) -> str:
     return "suppressed"
 
 
+_MIN_EVIDENCE_CHARS = 4     # shorter snippets ("x", "if") match too many lines to locate anything
+
+
+def _locate_lines(draft: LLMFindingDraft, chunk: CodeChunk, texts: list[str]) -> tuple[int, int]:
+    """File-absolute (line_start, line_end) for a finding the model reported.
+
+    Models cannot count lines reliably (the prompt carries no line numbers), and they may answer
+    relative to the chunk or to the file. A live benchmark run showed every finding in a file
+    reported at line 2, which also let a wrongly placed LLM finding displace the correct static
+    one in the deduplicator. So the evidence snippet is the source of truth: find its first line
+    in the code, nearest the model's own hint if it appears more than once. Only when the snippet
+    cannot be found do we fall back to the model's numbers, read as absolute if they fall inside
+    the chunk's line range and as chunk-relative otherwise. The result is clamped to the chunk.
+    """
+    lo, hi = chunk.line_start, max(chunk.line_end, chunk.line_start)
+
+    def clamp(n: int) -> int:
+        return max(lo, min(n, hi))
+
+    def as_absolute(n: int | None) -> int:
+        if not n or n < 1:
+            return lo
+        if lo <= n <= hi:
+            return n
+        if n <= hi - lo + 1:
+            return lo + n - 1          # chunk-relative
+        return clamp(n)
+
+    hint = as_absolute(draft.line_start)
+    evidence = [ln.strip() for ln in (draft.evidence or "").splitlines() if ln.strip()]
+    if evidence and len(evidence[0]) >= _MIN_EVIDENCE_CHARS:
+        for text in texts:
+            hits = [i for i, ln in enumerate(text.splitlines()) if evidence[0] in ln]
+            if hits:
+                start = clamp(lo + min(hits, key=lambda i: abs(lo + i - hint)))
+                return start, clamp(start + len(evidence) - 1)
+
+    start = hint
+    end = as_absolute(draft.line_end) if draft.line_end and draft.line_end != draft.line_start else start
+    return start, max(start, end)
+
+
 def _max_workers() -> int:
     """Worker threads for the LLM pass (env AEGISSCAN_LLM_WORKERS, default 4)."""
     try:
@@ -218,6 +260,7 @@ class LLMAuditor:
                 chunk=chunk,
                 provider=response.provider,
                 model=response.model,
+                sent_code=redacted_code,
             )
             if finding is not None:
                 findings.append(finding)
@@ -277,9 +320,17 @@ class LLMAuditor:
         chunk: CodeChunk,
         provider: str,
         model: str,
+        sent_code: str | None = None,
     ) -> Finding | None:
-        """Convert a validated LLMFindingDraft into a Finding."""
+        """Convert a validated LLMFindingDraft into a Finding.
+
+        *sent_code* is the (redacted) text the model actually saw; evidence it quotes is matched
+        against that first, then against the original chunk.
+        """
         severity = _SEVERITY_MAP.get(draft.severity, Severity.LOW)
+        line_start, line_end = _locate_lines(
+            draft, chunk, [sent_code, chunk.code] if sent_code else [chunk.code],
+        )
         label = _confidence_label(draft.confidence)
         log.debug(
             "LLM finding: %s | %s | confidence %.0f%% (%s)",
@@ -293,8 +344,8 @@ class LLMAuditor:
                 category=draft.category,
                 severity=severity,
                 confidence=draft.confidence,
-                line_start=draft.line_start or chunk.line_start,
-                line_end=draft.line_end or chunk.line_end,
+                line_start=line_start,
+                line_end=line_end,
                 evidence=draft.evidence or chunk.code[:300],
                 explanation=draft.explanation,
                 suggested_fix=draft.suggested_fix,

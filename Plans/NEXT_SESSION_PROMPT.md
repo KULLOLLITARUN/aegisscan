@@ -3,7 +3,7 @@
 Copy everything inside the block below into the first message of the new session (working directory: `D:\AI_Projects\AI-Driven_Workspace_Security_&_Optimization_Scanner`).
 
 ````text
-You are continuing work on AegisScan, an AI-driven workspace security & optimization scanner (Python 3.11+, Pydantic, Bandit/Semgrep/Gitleaks + a custom AST optimizer, Groq/OpenAI/Ollama LLM auditor, React/Vite dashboard served by a stdlib HTTP server).
+You are continuing work on AegisScan, an AI-driven workspace security & optimization scanner (Python 3.11+, Pydantic, Bandit/Semgrep/Gitleaks + a custom AST optimizer, Groq LLM auditor, React/Vite dashboard served by a stdlib HTTP server).
 
 ## Read first
 1. Plans/REMAINING_ISSUES_AND_TESTING.md — what is fixed, the prioritized remaining issues (P0/P1/P2) and exactly how to test.

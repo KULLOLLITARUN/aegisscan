@@ -2,9 +2,7 @@
 per-provider model selection, extended redaction, prompt-injection defence."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from scanner.config import CONFIG_FILENAME, load_config
 from scanner.llm.prompts import SYSTEM_PROMPT, build_user_prompt
@@ -13,7 +11,6 @@ from scanner.models.chunk import CodeChunk
 from scanner.models.finding import Finding, Severity
 from scanner.providers.base import LLMProvider, LLMResponse
 from scanner.providers.manager import ProviderManager
-from scanner.providers.openai_provider import OpenAIProvider
 from scanner.static_analysis.optimization_runner import run_optimizer
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
@@ -64,32 +61,9 @@ def test_config_defaults_and_valid_and_invalid(tmp_path: Path) -> None:
     assert load_config(tmp_path).exclude_dirs == frozenset()
 
 
-# ------------------------------------------------------------------- OpenAI
-def test_openai_unavailable_without_key(monkeypatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    p = OpenAIProvider()
-    assert not p.is_available
-    assert p.complete([{"role": "user", "content": "hi"}]).content == ""
-
-
-def test_openai_parses_response(monkeypatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    body = json.dumps({
-        "model": "gpt-4o-mini",
-        "choices": [{"message": {"content": '{"findings": []}'}}],
-        "usage": {"prompt_tokens": 7, "completion_tokens": 3},
-    }).encode()
-    resp_ctx = MagicMock()
-    resp_ctx.__enter__.return_value.read.return_value = body
-    with patch("urllib.request.urlopen", return_value=resp_ctx) as urlopen:
-        out = OpenAIProvider().complete([{"role": "user", "content": "x"}])
-    assert out.content == '{"findings": []}'
-    assert (out.input_tokens, out.output_tokens, out.provider) == (7, 3, "openai")
-    assert urlopen.call_args.args[0].get_header("Authorization") == "Bearer test-key"
-
-
-def test_manager_default_chain_includes_openai() -> None:
-    assert [p.name for p in ProviderManager()._providers] == ["groq", "openai", "ollama"]
+# ------------------------------------------------------------ provider chain
+def test_manager_default_chain_is_groq_only() -> None:
+    assert [p.name for p in ProviderManager()._providers] == ["groq"]
 
 
 class _Stub(LLMProvider):

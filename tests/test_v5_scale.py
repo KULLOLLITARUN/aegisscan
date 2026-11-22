@@ -3,7 +3,6 @@
 Covers:
   - Token-bucket RateLimiter acquire pacing
   - execute_with_backoff exponential retry and rate limit callbacks
-  - OllamaProvider properties and offline fallback behavior
   - ProviderManager multi-provider failover chain (Primary fails -> Secondary fallback)
   - Telemetry accumulation (requests, tokens, latency, rate limit hits)
 """
@@ -16,7 +15,6 @@ import pytest
 
 from scanner.providers.base import LLMProvider, LLMResponse
 from scanner.providers.manager import ProviderManager
-from scanner.providers.ollama_provider import OllamaProvider
 from scanner.providers.rate_limiter import RateLimiter, execute_with_backoff
 
 # ---------------------------------------------------------------------------
@@ -64,19 +62,6 @@ def test_execute_with_backoff_raises_after_max_retries() -> None:
 
     with pytest.raises(Exception, match="429"):
         execute_with_backoff(_always_fail, max_retries=1, base_delay=0.01)
-
-
-# ---------------------------------------------------------------------------
-# OllamaProvider
-# ---------------------------------------------------------------------------
-
-def test_ollama_provider_offline_graceful() -> None:
-    provider = OllamaProvider(host="http://localhost:99999")  # invalid port
-    assert provider.name == "ollama"
-    assert provider.is_available is False
-    resp = provider.complete(messages=[{"role": "user", "content": "hi"}])
-    assert resp.content == ""
-    assert resp.provider == "ollama"
 
 
 # ---------------------------------------------------------------------------

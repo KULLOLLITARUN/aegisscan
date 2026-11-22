@@ -1,8 +1,8 @@
 """
 ProviderManager — single entry point for all LLM completions (V5).
 
-Manages provider failover (Groq -> OpenAI -> Ollama), rate limiting,
-exponential backoff with jitter, and aggregate telemetry tracking.
+Manages the provider chain (Groq by default; any LLMProvider can be injected),
+rate limiting, exponential backoff with jitter, and aggregate telemetry tracking.
 """
 from __future__ import annotations
 
@@ -14,8 +14,6 @@ from typing import Sequence
 
 from scanner.providers.base import LLMProvider, LLMResponse
 from scanner.providers.groq_provider import DEFAULT_MODEL, GroqProvider
-from scanner.providers.ollama_provider import OllamaProvider
-from scanner.providers.openai_provider import OpenAIProvider
 from scanner.providers.rate_limiter import RateLimiter, execute_with_backoff
 
 log = logging.getLogger(__name__)
@@ -31,7 +29,7 @@ class ProviderManager:
         if providers is not None:
             self._providers = list(providers)
         else:
-            self._providers = [GroqProvider(), OpenAIProvider(), OllamaProvider()]
+            self._providers = [GroqProvider()]
 
         llm_rpm = int(os.environ.get("AEGISSCAN_LLM_RPM", "10"))
         self._rate_limiter = RateLimiter(requests_per_minute=llm_rpm, initial_tokens=1)
@@ -42,7 +40,7 @@ class ProviderManager:
         self.total_input_tokens: int = 0
         self.total_output_tokens: int = 0
         self.total_latency_seconds: float = 0.0
-        self.rate_limit_hits: int = 0
+        self._manager_rate_limit_hits: int = 0
         self.fallback_triggered: bool = False
 
     @property
@@ -68,9 +66,17 @@ class ProviderManager:
             return getattr(avail[0], "default_model", None) or DEFAULT_MODEL
         return DEFAULT_MODEL
 
+    @property
+    def rate_limit_hits(self) -> int:
+        """429s seen. Providers that fail over between models internally (Groq) absorb the 429
+        before it can reach the backoff wrapper, so they report their own count."""
+        with self._lock:
+            own = self._manager_rate_limit_hits
+        return own + sum(getattr(p, "rate_limit_hits", 0) for p in self._providers)
+
     def _increment_rate_limit_hits(self) -> None:
         with self._lock:
-            self.rate_limit_hits += 1
+            self._manager_rate_limit_hits += 1
 
     def complete(
         self,
@@ -103,8 +109,8 @@ class ProviderManager:
                     return provider.complete(
                         messages=messages,
                         # An explicit model applies to every provider; otherwise each
-                        # provider uses its own default (a Groq model id is meaningless
-                        # to OpenAI/Ollama during failover).
+                        # provider uses its own default (a model id from one provider is
+                        # meaningless to another during failover).
                         model=model or getattr(provider, "default_model", None) or resolved_model,
                         max_tokens=max_tokens,
                         temperature=temperature,

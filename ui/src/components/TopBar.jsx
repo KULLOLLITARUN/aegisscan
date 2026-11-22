@@ -132,7 +132,7 @@ export default function TopBar() {
                 />
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>Deep LLM Reasoning Pass</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Audits all code chunks via Groq / Ollama AI reasoning</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Audits all code chunks via Groq AI reasoning</div>
                 </div>
               </label>
 

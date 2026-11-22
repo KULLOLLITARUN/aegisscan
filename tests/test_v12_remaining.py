@@ -16,8 +16,6 @@ from scanner.models.finding import Finding, Severity
 from scanner.providers.base import LLMProvider, LLMResponse
 from scanner.providers.groq_provider import GroqProvider
 from scanner.providers.manager import ProviderManager
-from scanner.providers.ollama_provider import OllamaProvider
-from scanner.providers.openai_provider import OpenAIProvider
 from scanner.static_analysis.optimization_runner import run_optimizer
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
@@ -152,18 +150,6 @@ _PROMPT = [{"role": "user", "content": 'Reply with exactly: {"findings": []}'}]
 def test_live_groq_roundtrip() -> None:
     out = GroqProvider().complete(_PROMPT)
     assert out.content and out.provider == "groq"
-
-
-@pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
-def test_live_openai_roundtrip() -> None:
-    out = OpenAIProvider().complete(_PROMPT)
-    assert out.content and out.provider == "openai"
-
-
-@pytest.mark.skipif(not OllamaProvider().is_available, reason="Ollama daemon not running")
-def test_live_ollama_roundtrip() -> None:
-    out = OllamaProvider().complete(_PROMPT)
-    assert out.content and out.provider == "ollama"
 
 
 # ------------------------------------------------- groq model failover

@@ -1,6 +1,6 @@
 # AegisScan — AI-Driven Workspace Security & Optimization Scanner
 
-> **AegisScan** is a hybrid multi-layered security pipeline combining deterministic static analysis (Bandit, Semgrep, GitLeaks) with structured LLM AI reasoning (Groq, Ollama) to analyze codebases for security vulnerabilities, secrets, and performance anti-patterns.
+> **AegisScan** is a hybrid multi-layered security pipeline combining deterministic static analysis (Bandit, Semgrep, GitLeaks) with structured LLM AI reasoning (Groq) to analyze codebases for security vulnerabilities, secrets, and performance anti-patterns.
 
 ---
 
@@ -11,7 +11,7 @@ AegisScan operates through a 10-stage hybrid analysis pipeline:
 1. **Ingestion & Classification**: Fast workspace crawling with `.gitignore` compliance, file classifier for binary/generated/oversized files, and per-language Tree-sitter AST chunking.
 2. **Deterministic Static Analysis**: Concurrent multi-tool execution using `Bandit`, `Semgrep`, and `GitLeaks`.
 3. **AI Triggering & Secret Redaction**: Selective triggering rules (risky patterns, static findings, or `--deep` pass) with regex-based multi-mode secret scrubbing (`--privacy standard|redact|strict`).
-4. **Resilient LLM Provider Chain**: Multi-provider fallback chain (`Groq` cloud LLM → `Ollama` local LLM → Graceful Static Fallback) with token-bucket rate limiting and exponential backoff.
+4. **Resilient LLM Provider**: `Groq` cloud LLM with model-level failover, token-bucket rate limiting and exponential backoff, then a graceful static-only fallback.
 5. **AI Fix Patch Generator**: Automatic prompt engineering for high-confidence security findings to output production-ready unified `git diff` patches (`--generate-patches`).
 6. **Intelligence Layer**: Location & category deduplication, multi-tool correlation confidence boosting, and baseline suppression (`--save-baseline FILE` / `--baseline FILE`).
 7. **Scoring & Reporting**: "Midnight Obsidian" dark-mode HTML reports with SVG score gauges, inline AI diff patches, JSON export, and rich CLI terminal summary.
@@ -44,7 +44,7 @@ Copy `.env.example` to `.env` and add your Groq API key:
 GROQ_API_KEY=gsk_your_groq_api_key_here
 ```
 
-*(If no API key is provided, AegisScan automatically falls back to local Ollama or static-only mode).*
+*(If no API key is provided, AegisScan automatically falls back to static-only mode).*
 
 ---
 
@@ -154,8 +154,7 @@ MIT License — free for open-source and commercial use.
 
 | Setting | Where | Purpose |
 |---|---|---|
-| `GROQ_API_KEY`, `OPENAI_API_KEY` | `.env` / environment | LLM providers (failover order: Groq → OpenAI → Ollama) |
-| `OPENAI_BASE_URL`, `AEGISSCAN_OPENAI_MODEL` | environment | Point the OpenAI provider at a compatible endpoint / pick a model |
+| `GROQ_API_KEY` | `.env` / environment | LLM provider (Groq is the only provider; without a key the scan is static-only) |
 | `AEGISSCAN_GROQ_MODELS` | environment | Comma-separated Groq model ids (first is the default). Retired/unknown models are skipped automatically |
 | `AEGISSCAN_LLM_WORKERS`, `AEGISSCAN_LLM_RPM` | environment | Parallel LLM calls (default 4) and the global requests-per-minute cap (default 10) |
 | `AEGISSCAN_ALLOWED_ROOTS` | environment | Extra directories the web server may scan (`;` on Windows, `:` elsewhere). Default: project root only |

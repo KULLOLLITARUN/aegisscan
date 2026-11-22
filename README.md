@@ -155,15 +155,13 @@ The image is built from the [Dockerfile](Dockerfile) (Node builds the UI, then P
 | `AEGISSCAN_HOSTED_LLM=1` | Allow LLM scans using the server's own `GROQ_API_KEY` (off by default) |
 | `AEGISSCAN_MAX_UPLOAD_MB`, `AEGISSCAN_MAX_UNPACKED_MB`, `AEGISSCAN_MAX_FILES`, `AEGISSCAN_SCAN_TIMEOUT_S`, `AEGISSCAN_MAX_CONCURRENT`, `AEGISSCAN_RATE_LIMIT` | Override the limits above |
 
-**Free option: Hugging Face Spaces.** A free Space (CPU basic) has far more memory than Render's free tier, which suits semgrep. It runs the same Docker image.
+**Free option: run it on your own PC and share it through a free tunnel.** This uses your PC's full power, including Semgrep, and costs nothing. It is online only while your PC and the script are running.
 
-1. Create a Hugging Face account, then **New Space**: any name (for example `aegisscan`), SDK **Docker**, template **Blank**, hardware **CPU basic**.
-2. In the Space, **Settings**, **Variables and secrets**, add a **secret** named `AEGISSCAN_ACCESS_TOKEN` with 24+ random characters. Do this before the first push: hosted mode will not start without it.
-3. Create an access token with **write** permission at huggingface.co/settings/tokens.
-4. From this repository, commit your changes, then run `powershell -ExecutionPolicy Bypass -File deploy\huggingface\deploy.ps1 -SpaceUrl https://huggingface.co/spaces/YOUR_NAME/aegisscan`. When git asks for credentials, the username is your Hugging Face name and the password is the write token.
-5. Watch the Space's build log. The app is at `https://YOUR_NAME-aegisscan.hf.space`.
+1. Download `cloudflared-windows-amd64.exe` from the [cloudflared releases](https://github.com/cloudflare/cloudflared/releases/latest), rename it to `cloudflared.exe` and put it in `deploy\tunnel\` (it is git-ignored). No Cloudflare account is needed for quick tunnels.
+2. Run `powershell -ExecutionPolicy Bypass -File deploy\tunnel\start-tunnel.ps1`. It starts the server in hosted mode on `127.0.0.1` only, opens the tunnel, and prints a public `https://....trycloudflare.com` address plus a generated access token (shown once, not saved). Pass `-Token <16+ characters>` or set `AEGISSCAN_ACCESS_TOKEN` to use your own.
+3. Share the address and the token with people you trust. Press Ctrl+C in that window to stop both the scanner and the tunnel.
 
-Free Spaces go to sleep after a period of inactivity and wake on the next visit, and their disk is temporary. This route has not been tested end to end.
+The address changes each run. `-NoTunnel` starts only the local server, for testing. Uploads and clones are scanned on your PC, so only share with people you would let upload code to it.
 
 **Things to know before going public.** One shared token is access control, not user accounts: anyone with it can scan. A clone's size is checked after it finishes, and the host name is resolved once for the safety check and again by git, so a hostile DNS server could in principle race that check, which is one more reason to keep the token private. Uploaded folders are kept up to 30 minutes on the instance's temporary disk. Scan time depends on the instance: on a busy development machine a 4-file folder took 108 s while a one-file repository took 12 s, so size the plan from a real test. The Docker image has not been built in the environment this was written in (no Docker there); build it once and run a scan before relying on it.
 

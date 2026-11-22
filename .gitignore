@@ -44,3 +44,6 @@ report*.sarif
 
 # ---- Hallmark design-skill working files ----
 .hallmark/
+
+# ---- Tunnel helper binary (download separately, see deploy/tunnel/start-tunnel.ps1) ----
+deploy/tunnel/cloudflared.exe

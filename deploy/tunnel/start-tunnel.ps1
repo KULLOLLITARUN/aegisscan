@@ -16,8 +16,13 @@
   Local port for the server. Default 8150.
 
 .PARAMETER Token
-  Access token for the scanner (16+ characters). Default: the AEGISSCAN_ACCESS_TOKEN environment
-  variable, otherwise a random one is generated and shown once.
+  Access token for the scanner (16+ characters). Order of use: this parameter, the
+  AEGISSCAN_ACCESS_TOKEN environment variable, the token saved on this PC, otherwise a random one is
+  generated and saved. The saved token is encrypted for your Windows account and stored in
+  %LOCALAPPDATA%\AegisScan\token.dat, outside the project.
+
+.PARAMETER NewToken
+  Ignore the saved token, generate a fresh one and save it (use this if the token leaked).
 
 .PARAMETER NoTunnel
   Start only the local server (for testing), without a public address.
@@ -28,6 +33,7 @@
 param(
   [int]$Port = 8150,
   [string]$Token = $env:AEGISSCAN_ACCESS_TOKEN,
+  [switch]$NewToken,
   [switch]$NoTunnel
 )
 
@@ -40,13 +46,36 @@ function Stop-Tree([System.Diagnostics.Process]$p) {
   if ($p -and -not $p.HasExited) { & taskkill.exe /PID $p.Id /T /F 2>$null | Out-Null }
 }
 
-# ---- token ----
-if (-not $Token) {
+# ---- token: supplied, saved on this PC (encrypted for this Windows account), or new ----
+$tokenFile = Join-Path $env:LOCALAPPDATA 'AegisScan\token.dat'
+
+function Read-SavedToken {
+  if (-not (Test-Path -LiteralPath $tokenFile)) { return $null }
+  try {
+    $secure = ConvertTo-SecureString ((Get-Content -LiteralPath $tokenFile -Raw).Trim())
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+  } catch { return $null }   # unreadable (for example from another Windows account): make a new one
+}
+
+function Save-Token([string]$value) {
+  New-Item -ItemType Directory -Force -Path (Split-Path $tokenFile) | Out-Null
+  ConvertTo-SecureString $value -AsPlainText -Force | ConvertFrom-SecureString | Set-Content -LiteralPath $tokenFile -Encoding ascii
+}
+
+$tokenSource = 'supplied'
+if (-not $Token -and -not $NewToken) {
+  $saved = Read-SavedToken
+  if ($saved) { $Token = $saved; $tokenSource = 'saved' }
+}
+if (-not $Token -or $NewToken) {
   $bytes = New-Object byte[] 24
   $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
   $rng.GetBytes($bytes)
   $Token = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
-  $generated = $true
+  Save-Token $Token
+  $tokenSource = 'new'
 }
 if ($Token.Length -lt 16) { throw "The access token must be at least 16 characters." }
 
@@ -128,11 +157,22 @@ try {
   Write-Host ""
   Write-Host "AegisScan is running."
   Write-Host "  Address : $url"
-  if ($generated) { Write-Host "  Token   : $Token   (generated now; copy it, it is not saved)" }
-  else { Write-Host "  Token   : the one you supplied" }
+  switch ($tokenSource) {
+    'new'      { Write-Host "  Token   : $Token   (new; saved on this PC so it stays the same next time)" }
+    'saved'    { Write-Host "  Token   : $Token   (your saved token, the same as last time)" }
+    default    { Write-Host "  Token   : the one you supplied" }
+  }
+  if (-not $NoTunnel) {
+    try { Set-Clipboard -Value $url; Write-Host "  (The address is copied to your clipboard.)" } catch { }
+    Write-Host ""
+    Write-Host "Message you can send (send the token separately):"
+    Write-Host "  Try my code scanner: $url"
+    Write-Host "  Guide: https://github.com/KULLOLLITARUN/aegisscan/blob/main/docs/USER_GUIDE.md"
+  }
   Write-Host ""
   Write-Host "Keep this window open: closing it, or pressing Ctrl+C, stops the scanner and the tunnel."
-  Write-Host "Only share the address and token with people you trust. This PC does the scanning."
+  Write-Host "The address changes every time you start this. Only share it with people you trust."
+  Write-Host "To change the token: run again with -NewToken."
   while (-not $server.HasExited) { Start-Sleep -Seconds 2 }
   Write-Host "The server stopped. See $logDir for logs."
 }

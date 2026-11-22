@@ -158,8 +158,8 @@ The image is built from the [Dockerfile](Dockerfile) (Node builds the UI, then P
 **Free option: run it on your own PC and share it through a free tunnel.** This uses your PC's full power, including Semgrep, and costs nothing. It is online only while your PC and the script are running.
 
 1. Download `cloudflared-windows-amd64.exe` from the [cloudflared releases](https://github.com/cloudflare/cloudflared/releases/latest), rename it to `cloudflared.exe` and put it in `deploy\tunnel\` (it is git-ignored). No Cloudflare account is needed for quick tunnels.
-2. Run `powershell -ExecutionPolicy Bypass -File deploy\tunnel\start-tunnel.ps1`. It starts the server in hosted mode on `127.0.0.1` only, opens the tunnel, and prints a public `https://....trycloudflare.com` address plus a generated access token (shown once, not saved). Pass `-Token <16+ characters>` or set `AEGISSCAN_ACCESS_TOKEN` to use your own.
-3. Share the address and the token with people you trust. Press Ctrl+C in that window to stop both the scanner and the tunnel.
+2. Double-click `share_aegisscan.bat` in the project folder (or run `powershell -ExecutionPolicy Bypass -File deploy\tunnel\start-tunnel.ps1`). It starts the server in hosted mode on `127.0.0.1` only, opens the tunnel, copies the public `https://....trycloudflare.com` address to your clipboard and prints it with a ready-to-send message.
+3. The access token is generated on the first run and saved on your PC, encrypted for your Windows account, in `%LOCALAPPDATA%\AegisScan\token.dat` (outside the project). Every later run reuses it, so you only send it to people once. Run `share_aegisscan.bat -NewToken` to replace it, or pass `-Token <16+ characters>` or set `AEGISSCAN_ACCESS_TOKEN` to use your own. Share the address and the token with people you trust, through a private channel, and press Ctrl+C (or close the window) to stop.
 
 The address changes each run. `-NoTunnel` starts only the local server, for testing. Uploads and clones are scanned on your PC, so only share with people you would let upload code to it.
 

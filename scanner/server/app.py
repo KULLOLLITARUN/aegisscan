@@ -16,14 +16,18 @@ import mimetypes
 import os
 import socket
 import sys
+import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from socketserver import ThreadingMixIn
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
+
+from . import hosted
 
 load_dotenv()
 
@@ -35,6 +39,7 @@ _INDEX_HTML = _DIST_DIR / "index.html"
 
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
+_MAX_JSON_BODY = 1024 * 1024  # scan requests are small JSON documents
 
 
 def _ui_build_hint() -> str | None:
@@ -89,23 +94,65 @@ def _parse_qs_bool(val: str | None, default: bool = False) -> bool:
     return val.lower() in ("1", "true", "yes")
 
 
+def _as_bool(value: Any, default: bool) -> bool:
+    """Booleans arrive as real bools (JSON body) or strings (query string)."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return _parse_qs_bool(str(value), default)
+
+
+def _normalize_scan_params(params: dict) -> dict:
+    """One shape for scan options, whether they came from a query string or a JSON body."""
+    return {
+        "path": str(params.get("path") or "."),
+        "upload_id": str(params.get("upload_id") or ""),
+        "git_url": str(params.get("git_url") or "").strip(),
+        "static_only": _as_bool(params.get("static_only"), True),
+        "deep": _as_bool(params.get("deep"), False),
+        "generate_patches": _as_bool(params.get("generate_patches"), False),
+        "privacy": str(params.get("privacy") or "standard"),
+        "api_key": str(params.get("api_key") or "").strip(),
+    }
+
+
+def _apply_privacy(p: dict) -> None:
+    """privacy=strict means local static analysis only: no remote LLM calls of any kind."""
+    if p["privacy"] == "strict":
+        p["static_only"] = True
+        p["deep"] = False
+        p["generate_patches"] = False
+
+
 class _SSELogHandler(logging.Handler):
     """Forwards Python log records (provider failover, rate limits, tool errors —
     everything that previously only reached the server's own terminal) to the
-    browser as SSE "log" events, in real time, while a scan is in flight."""
+    browser as SSE "log" events, in real time, while a scan is in flight.
 
-    def __init__(self, sse_fn) -> None:
+    thread_id: when set, only records emitted by that thread are forwarded (hosted mode, so users
+    running scans at the same time never see each other's logs). scrub: message filter (hosted
+    mode removes server paths)."""
+
+    def __init__(self, sse_fn, thread_id: int | None = None, scrub=None) -> None:
         super().__init__()
         self._sse = sse_fn
+        self._thread_id = thread_id
+        self._scrub = scrub
         self.setFormatter(logging.Formatter("%(message)s"))
 
     def emit(self, record: logging.LogRecord) -> None:
+        if self._thread_id is not None and record.thread != self._thread_id:
+            return
         try:
+            message = self.format(record)
+            if self._scrub:
+                message = self._scrub(message)
             self._sse("log", {
                 "ts": time.strftime("%H:%M:%S"),
                 "level": record.levelname.lower(),
                 "logger": record.name,
-                "message": self.format(record),
+                "message": message,
             })
         except Exception:
             pass  # never let a logging hiccup break the scan itself
@@ -130,6 +177,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         """Reject DNS-rebinding (non-local Host) and cross-site (foreign Origin)
         requests. The UI is served same-origin, so no CORS is needed."""
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0] if self.headers.get("Host") else ""
+        if hosted.is_hosted():
+            return self._hosted_request_allowed(host.lower())
         if host and host.lower() not in _LOCAL_HOSTS:
             self._send_json({"error": "Forbidden host"}, status=HTTPStatus.FORBIDDEN)
             return False
@@ -137,6 +186,21 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         if origin:
             origin_host = (urlparse(origin).hostname or "").lower()
             if origin_host not in {"localhost", "127.0.0.1", "::1"}:
+                self._send_json({"error": "Forbidden origin"}, status=HTTPStatus.FORBIDDEN)
+                return False
+        return True
+
+    def _hosted_request_allowed(self, host: str) -> bool:
+        """Hosted mode: the Host must be one of the configured public names (when any are set) and a
+        browser Origin must be this same site. The access token is checked separately."""
+        allowed = hosted.allowed_hosts()
+        if allowed and host not in allowed:
+            self._send_json({"error": "Forbidden host"}, status=HTTPStatus.FORBIDDEN)
+            return False
+        origin = self.headers.get("Origin")
+        if origin:
+            origin_host = (urlparse(origin).hostname or "").lower()
+            if origin_host != host and origin_host not in allowed:
                 self._send_json({"error": "Forbidden origin"}, status=HTTPStatus.FORBIDDEN)
                 return False
         return True
@@ -153,16 +217,51 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # ------------------------------------------------------------------ gates
+    def _require_auth(self) -> bool:
+        if hosted.authorized(self.headers):
+            return True
+        self._send_json({"error": "A valid access token is required."}, status=HTTPStatus.UNAUTHORIZED)
+        return False
+
+    def _api_gate(self) -> bool:
+        """Host/Origin checks, then (hosted mode only) the access token."""
+        return self._request_allowed() and self._require_auth()
+
+    def _read_json_body(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            length = 0
+        raw = self.rfile.read(min(length, _MAX_JSON_BODY)) if length > 0 else b"{}"
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except Exception:
+            return {}
+        return data if isinstance(data, dict) else {}
+
     # ------------------------------------------------------------------ GET
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
 
-        # ── Scan history ──────────────────────────────────────────────────
-        if path.startswith("/api/") and not self._request_allowed():
+        # Health check (Render) and UI capabilities need no token.
+        if path == "/api/health":
+            self._send_json({"ok": True})
+            return
+        if path == "/api/config":
+            if self._request_allowed():
+                self._send_json(hosted.public_config())
             return
 
+        if path.startswith("/api/") and not self._api_gate():
+            return
+
+        # ── Scan history ──────────────────────────────────────────────────
         if path == "/api/history":
+            if hosted.is_hosted():
+                self._send_json([])  # no history is kept or shared in hosted mode
+                return
             qs = parse_qs(parsed.query)
             limit = int(qs.get("limit", ["20"])[0])
             from scanner.storage.history import ScanHistoryDB
@@ -172,7 +271,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
 
         # ── SSE live scan stream ─────────────────────────────────────────
         if path == "/api/scan/stream":
-            self._handle_sse_scan(parsed.query)
+            self._handle_scan({k: v[0] for k, v in parse_qs(parsed.query).items()}, stream=True)
             return
 
         # ── Vite asset files ─────────────────────────────────────────────
@@ -198,48 +297,60 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------------ POST
     def do_POST(self) -> None:
-        if self.path == "/api/scan":
-            if not self._request_allowed():
+        path = urlparse(self.path).path
+        if path in ("/api/scan", "/api/scan/stream"):
+            if not self._api_gate():
                 return
-            self._handle_sync_scan()
+            self._handle_scan(self._read_json_body(), stream=path.endswith("/stream"))
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
 
-    # ------------------------------------------------------------------ SSE scan
-    def _handle_sse_scan(self, query_string: str) -> None:
-        qs = parse_qs(query_string)
-        raw_path = qs.get("path", ["."])[0]
-        try:
-            target_path = _resolve_scan_path(raw_path)
-        except PermissionError as exc:
-            self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
-            return
-        static_only = _parse_qs_bool(qs.get("static_only", ["true"])[0], default=True)
-        deep = _parse_qs_bool(qs.get("deep", ["false"])[0])
-        generate_patches = _parse_qs_bool(qs.get("generate_patches", ["false"])[0])
-        privacy = qs.get("privacy", ["standard"])[0]
-        if privacy == "strict":
-            static_only = True
-            deep = False
-            generate_patches = False
-        api_key = qs.get("api_key", [""])[0]
-        if api_key:
-            os.environ["GROQ_API_KEY"] = api_key
+    # ------------------------------------------------------------------ scan entry point
+    def _handle_scan(self, params: dict, stream: bool) -> None:
+        p = _normalize_scan_params(params)
+        if hosted.is_hosted():
+            self._handle_hosted_scan(p, stream)
+        else:
+            self._handle_local_scan(p, stream)
 
+    def _open_sse(self):
+        """Send SSE headers and return a thread-safe sse(event, data) writer."""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-cache, no-transform")
+        self.send_header("X-Accel-Buffering", "no")
         self.send_header("Connection", "keep-alive")
         self.end_headers()
+        lock = threading.Lock()
 
         def sse(event: str, data: Any) -> None:
             payload = f"event: {event}\ndata: {json.dumps(data)}\n\n"
-            try:
-                self.wfile.write(payload.encode("utf-8"))
-                self.wfile.flush()
-            except Exception:
-                pass
+            with lock:
+                try:
+                    self.wfile.write(payload.encode("utf-8"))
+                    self.wfile.flush()
+                except Exception:
+                    pass
 
+        return sse
+
+    # ------------------------------------------------------------------ local scans
+    def _handle_local_scan(self, p: dict, stream: bool) -> None:
+        try:
+            target_path = _resolve_scan_path(p["path"])
+        except PermissionError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
+            return
+        _apply_privacy(p)
+        if p["api_key"]:
+            os.environ["GROQ_API_KEY"] = p["api_key"]
+        if stream:
+            self._local_stream(target_path, p)
+        else:
+            self._local_sync(target_path, p)
+
+    def _local_stream(self, target_path: Path, p: dict) -> None:
+        sse = self._open_sse()
         try:
             # Validate path before calling run() — run() uses sys.exit() on bad paths
             if not target_path.exists():
@@ -271,10 +382,10 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             try:
                 result, _, _ = run(
                     path=target_path,
-                    static_only=static_only,
-                    deep=deep,
-                    generate_patches=generate_patches,
-                    privacy=privacy,
+                    static_only=p["static_only"],
+                    deep=p["deep"],
+                    generate_patches=p["generate_patches"],
+                    privacy=p["privacy"],
                     progress=on_progress,
                 )
             finally:
@@ -289,32 +400,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             log.error("SSE scan error: %s\n%s", exc, traceback.format_exc())
             sse("error", {"error": str(exc)})
 
-    # ------------------------------------------------------------------ sync scan
-    def _handle_sync_scan(self) -> None:
-        content_length = int(self.headers.get("Content-Length", 0))
-        body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
-        try:
-            payload = json.loads(body_bytes.decode("utf-8"))
-        except Exception:
-            payload = {}
-
-        try:
-            target_path = _resolve_scan_path(str(payload.get("path", ".")))
-        except PermissionError as exc:
-            self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
-            return
-        static_only = bool(payload.get("static_only", True))
-        generate_patches = bool(payload.get("generate_patches", False))
-        deep = bool(payload.get("deep", False))
-        privacy = str(payload.get("privacy", "standard"))
-        if privacy == "strict":
-            static_only = True
-            deep = False
-            generate_patches = False
-        api_key = str(payload.get("api_key", "")).strip()
-        if api_key:
-            os.environ["GROQ_API_KEY"] = api_key
-
+    def _local_sync(self, target_path: Path, p: dict) -> None:
         if not target_path.exists() or not target_path.is_dir():
             self._send_json({"error": f"Invalid path: {target_path}"}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -322,16 +408,146 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             from main import run
             result, _, _ = run(
                 path=target_path,
-                static_only=static_only,
-                deep=deep,
-                generate_patches=generate_patches,
-                privacy=privacy,
+                static_only=p["static_only"],
+                deep=p["deep"],
+                generate_patches=p["generate_patches"],
+                privacy=p["privacy"],
             )
             self._send_json(json.loads(result.model_dump_json()))
         except Exception as exc:
             import traceback
             log.error("Sync scan error: %s\n%s", exc, traceback.format_exc())
             self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    # ------------------------------------------------------------------ hosted scans
+    def _hosted_source(self, p: dict):
+        """Resolve the code to scan from an upload id or Git URL.
+        Returns (target, label, cleanup) or None after sending an error response."""
+        if p["upload_id"]:
+            workspace = hosted.get_workspace(p["upload_id"])
+            if workspace is None:
+                self._send_json(
+                    {"error": "That upload was not found or has expired. Choose the folder again."},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return None
+            return hosted.code_dir(workspace), hosted.read_label(workspace), None
+        self._send_json(
+            {"error": "Provide an uploaded folder or a Git URL to scan."},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+        return None
+
+    def _handle_hosted_scan(self, p: dict, stream: bool) -> None:
+        ip = hosted.client_ip(self.headers, self.client_address)
+        if not hosted.scan_limiter().allow(ip):
+            self._send_json(
+                {"error": "Too many scans from your address. Wait a few minutes and try again."},
+                status=HTTPStatus.TOO_MANY_REQUESTS,
+            )
+            return
+
+        # Hosted scans never use a user-supplied key, and stay static-only unless the operator opts in.
+        p["api_key"] = ""
+        if not hosted.llm_enabled():
+            p.update(static_only=True, deep=False, generate_patches=False, privacy="strict")
+        else:
+            _apply_privacy(p)
+
+        source = self._hosted_source(p)
+        if source is None:
+            return
+        target, label, cleanup = source
+
+        if not hosted.slots().try_acquire():
+            if cleanup:
+                cleanup()
+            self._send_json(
+                {"error": "The server is busy with other scans. Try again in a minute."},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+
+        def on_finish() -> None:  # runs when the scan worker really ends (even after a timeout)
+            hosted.slots().release()
+            if cleanup:
+                cleanup()
+
+        if stream:
+            self._hosted_stream(target, label, p, on_finish)
+        else:
+            self._hosted_sync(target, label, p, on_finish)
+
+    def _hosted_run(self, target: Path, label: str, p: dict, on_finish, sse=None):
+        """Run one hosted scan in a worker thread with a time limit; returns the sanitised ScanResult."""
+        from main import run
+
+        def scrub(text: str) -> str:
+            return hosted.sanitize_text(text, target, label)
+
+        def on_progress(phase: str, pct: int, detail: str = "") -> None:
+            if sse:
+                sse("progress", {
+                    "phase": scrub(f"{phase}: {detail}" if detail else phase),
+                    "file": "",
+                    "pct": pct,
+                    "found": 0,
+                })
+
+        def work():
+            handler = None
+            root_logger = logging.getLogger()
+            prev_level = root_logger.level
+            if sse:
+                # Only this scan's own thread is forwarded, so concurrent users never see each other's logs.
+                handler = _SSELogHandler(sse, thread_id=threading.get_ident(), scrub=scrub)
+                handler.setLevel(logging.INFO)
+                root_logger.addHandler(handler)
+                root_logger.setLevel(min(prev_level or logging.WARNING, logging.INFO))
+            try:
+                result, _, _ = run(
+                    path=target,
+                    static_only=p["static_only"],
+                    deep=p["deep"],
+                    generate_patches=p["generate_patches"],
+                    privacy=p["privacy"],
+                    progress=on_progress if sse else None,
+                    record_history=False,
+                )
+                return result
+            finally:
+                if handler:
+                    root_logger.removeHandler(handler)
+                    root_logger.setLevel(prev_level)
+
+        result = hosted.run_with_timeout(work, hosted.scan_timeout_seconds(), on_finish)
+        hosted.sanitize_result(result, target, label)
+        return result
+
+    def _hosted_stream(self, target: Path, label: str, p: dict, on_finish) -> None:
+        sse = self._open_sse()
+        try:
+            result = self._hosted_run(target, label, p, on_finish, sse=sse)
+            sse("progress", {"phase": "Complete", "file": "", "pct": 100, "found": len(result.findings)})
+            sse("complete", json.loads(result.model_dump_json()))
+        except hosted.ScanTimeout as exc:
+            sse("error", {"error": str(exc)})
+        except Exception as exc:
+            log.error("Hosted scan error: %s", exc, exc_info=True)
+            sse("error", {"error": hosted.sanitize_text(str(exc), target, label)})
+
+    def _hosted_sync(self, target: Path, label: str, p: dict, on_finish) -> None:
+        try:
+            result = self._hosted_run(target, label, p, on_finish)
+            self._send_json(json.loads(result.model_dump_json()))
+        except hosted.ScanTimeout as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.GATEWAY_TIMEOUT)
+        except Exception as exc:
+            log.error("Hosted scan error: %s", exc, exc_info=True)
+            self._send_json(
+                {"error": hosted.sanitize_text(str(exc), target, label)},
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
 
 class _ExclusiveHTTPServer(HTTPServer):
@@ -350,11 +566,30 @@ class _ExclusiveHTTPServer(HTTPServer):
         super().server_bind()
 
 
+class _ExclusiveThreadingHTTPServer(ThreadingMixIn, _ExclusiveHTTPServer):
+    """Hosted mode: one thread per request, so a long scan or SSE stream never blocks other users."""
+
+    daemon_threads = True
+
+
 def run_server(port: int = 8000) -> None:
     """Launch the AegisScan production web server."""
-    server_address = ("127.0.0.1", port)
+    problems = hosted.startup_errors()
+    if problems:
+        print("\nERROR: " + "\n       ".join(problems), file=sys.stderr)
+        sys.exit(1)
+
+    is_hosted = hosted.is_hosted()
+    if is_hosted:
+        # Render (and most hosts) tell the app which port to use via $PORT and need all interfaces.
+        port = int(os.environ.get("PORT") or port)
+        server_address = ("0.0.0.0", port)  # noqa: S104 - intended in hosted mode, token-protected
+        server_class = _ExclusiveThreadingHTTPServer
+    else:
+        server_address = ("127.0.0.1", port)
+        server_class = _ExclusiveHTTPServer
     try:
-        httpd = _ExclusiveHTTPServer(server_address, AegisScanRequestHandler)
+        httpd = server_class(server_address, AegisScanRequestHandler)
     except OSError as exc:
         print(
             f"\nERROR: could not start on port {port}: {exc}\n"
@@ -364,10 +599,12 @@ def run_server(port: int = 8000) -> None:
         )
         sys.exit(1)
     print(f"\n{'='*62}")
-    print("  AEGISSCAN COMMAND CENTER")
+    print("  AEGISSCAN COMMAND CENTER" + ("  (hosted mode)" if is_hosted else ""))
     print(f"  -> http://localhost:{port}")
     print("  Press Ctrl+C to stop.")
-    if _allow_any_path():
+    if is_hosted:
+        print("\n  Hosted mode: uploads and Git URLs only, access token required, no server paths.")
+    elif _allow_any_path():
         print("\n  WARNING: AEGISSCAN_ALLOW_ANY_PATH is set - the server will scan ANY directory.")
     hint = _ui_build_hint()
     if hint:

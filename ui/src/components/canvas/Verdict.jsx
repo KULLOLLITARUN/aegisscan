@@ -2,13 +2,26 @@ import { scoreLabel, verdictSentence, previousScan, scoreDelta } from '../../lib
 
 const nf = new Intl.NumberFormat('en', { maximumFractionDigits: 1, minimumFractionDigits: 1 })
 
-function Skeleton() {
+function Live({ steps, liveSec }) {
   return (
     <div role="status" aria-label="Scan in progress, score not ready">
       <div className="ag-label">Security score</div>
-      <span className="ag-skel-bar" style={{ width: 200, height: 72, marginTop: 12 }} />
-      <span className="ag-skel-bar" style={{ width: '100%', height: 24, marginTop: 16 }} />
-      <span className="ag-skel-bar" style={{ width: 240, height: 18, marginTop: 16 }} />
+      <div className="ag-live-head">
+        <span className="ag-hero ag-live-hero">Scanning<small className="ag-mono">{Math.floor(liveSec)} s</small></span>
+        <p className="ag-live-note">The score appears when the scan finishes. Some steps, like Semgrep, can take a few minutes.</p>
+      </div>
+      <ol className="ag-steps ag-mono" aria-label="Scan steps so far">
+        {steps.map((s, i) => {
+          const active = i === steps.length - 1
+          return (
+            <li key={s} className={active ? 'active' : 'done'}>
+              <span className="ag-step-mark" aria-hidden="true">{active ? '>' : '+'}</span>
+              <span>{s}</span>
+              <span className="ag-step-state">{active ? 'running' : 'done'}</span>
+            </li>
+          )
+        })}
+      </ol>
     </div>
   )
 }
@@ -29,8 +42,8 @@ function DeltaLine({ result, history, historyStatus }) {
 }
 
 /** The verdict block drawn on the canvas. Every number comes from the ScanResult or /api/history. */
-export default function Verdict({ result, scanning, error, history, historyStatus }) {
-  if (scanning) return <div className="ag-score"><Skeleton /></div>
+export default function Verdict({ result, scanning, error, history, historyStatus, steps = [], liveSec = 0 }) {
+  if (scanning) return <div className="ag-score"><Live steps={steps} liveSec={liveSec} /></div>
 
   const has = result && result.security_score != null
   const sec = has ? result.security_score : null

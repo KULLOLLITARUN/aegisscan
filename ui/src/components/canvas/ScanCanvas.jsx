@@ -18,7 +18,7 @@ const pinLabel = (f, sev, rel) =>
  */
 export default function ScanCanvas({
   scene, result, scanning, error, history, historyStatus,
-  selectedId, onSelect, hoverId, onHover, planeRef, visible, tilesDone, livePlane, phase, onRun,
+  selectedId, onSelect, hoverId, onHover, planeRef, visible, tilesDone, livePlane, phase, steps, liveSec, onRun,
 }) {
   const { hosted } = useScan()
   const stageRef = useRef(null)
@@ -184,7 +184,7 @@ export default function ScanCanvas({
         })}
       </div>
 
-      <Verdict result={result} scanning={scanning} error={error} history={history} historyStatus={historyStatus} />
+      <Verdict result={result} scanning={scanning} error={error} history={history} historyStatus={historyStatus} steps={steps} liveSec={liveSec} />
 
       <div className="ag-viewctl">
         <button type="button" className="ag-btn ag-btn--sm" aria-pressed={sway} onClick={() => setSway((s) => !s)}>

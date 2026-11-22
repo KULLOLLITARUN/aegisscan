@@ -6,6 +6,7 @@ import { usePlayback } from '../lib/usePlayback'
 import ScanCanvas from '../components/canvas/ScanCanvas'
 import Timeline from '../components/timeline/Timeline'
 import Inspector from '../components/inspector/Inspector'
+import { liveSteps } from '../lib/steps'
 
 /** Scan view: canvas with verdict, scrubbable timeline and the docked inspector. */
 export default function ScanPage() {
@@ -16,7 +17,11 @@ export default function ScanPage() {
   const [tab, setTab] = useState('queue')
   const [hoverId, setHoverId] = useState(null)
   const planeRef = useRef(null)
+  const steps = useMemo(() => (scanning ? liveSteps(recording.events) : []), [scanning, recording.events])
   const trackRef = useRef(null)
+
+  // Show the live activity while a scan runs; the queue is empty until it finishes.
+  useEffect(() => { if (scanning) setTab('activity') }, [scanning])
 
   const scene = useMemo(() => buildScene(scanResult), [scanResult])
 
@@ -83,6 +88,8 @@ export default function ScanPage() {
           tilesDone={tilesDone}
           livePlane={scanning ? progress.pct : null}
           phase={scanning ? progress.phase : ''}
+          steps={steps}
+          liveSec={liveSec}
           onRun={startScan}
         />
         <Timeline

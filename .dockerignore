@@ -1,0 +1,29 @@
+# Secrets and local state must never end up in an image.
+.env
+.env.*
+*.db
+.aegisscan_history.db
+
+.git
+.gitignore
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.egg-info
+build
+dist
+
+# UI: dependencies are installed in the build stage, output is rebuilt there.
+ui/node_modules
+scanner/server/dist
+
+# Not needed at run time.
+tests
+Plans
+examples
+report*.html
+report*.sarif
+*.md
+!README.md

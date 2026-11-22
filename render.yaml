@@ -1,0 +1,23 @@
+# Render Blueprint for AegisScan (hosted mode). Create it from the repository:
+#   Render dashboard -> New -> Blueprint -> pick the repo.
+# See "Hosting on Render" in the README.
+services:
+  - type: web
+    name: aegisscan
+    runtime: docker
+    # Semgrep and the scan pipeline need real memory. If scans are killed or very slow, move to a larger plan.
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: AEGISSCAN_MODE
+        value: hosted
+      # Render generates a random token once; read it in the service's Environment tab and share it
+      # only with the people who should use the scanner.
+      - key: AEGISSCAN_ACCESS_TOKEN
+        generateValue: true
+      # Uncomment and set if you add a custom domain (the onrender.com name is added automatically).
+      # - key: AEGISSCAN_ALLOWED_HOSTS
+      #   value: scan.example.com
+      # Hosted scans are static-only. Only enable this together with a GROQ_API_KEY secret:
+      # - key: AEGISSCAN_HOSTED_LLM
+      #   value: "1"

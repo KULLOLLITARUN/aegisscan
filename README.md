@@ -126,6 +126,37 @@ Every region has loading, empty and error states. All numbers come from the scan
 
 **Known limits.** The API returns the findings but not the full file list, so the floor shows only files that have findings, sized by the highest line a finding reaches. Other analysed files appear as a count. The canvas draws at most the 48 most severe findings and notes how many more are in the queue. The server does not store full scan results or phase timings: after a page reload the canvas is empty until you run a scan, and the timeline is only recorded for scans run in the current browser session.
 
+### Hosting it (Render or any Docker host)
+
+A public server cannot read a visitor's `C:` or `D:` drive, so **hosted mode** replaces the path box with two ways to supply code, and locks the server down. Local mode (above) is unchanged.
+
+- **Folder:** the browser picks any folder, drops dependencies, build output, binaries and files over 1 MB, zips the rest in the page and uploads it (default limit 50 MB zipped, 5,000 files). The server unpacks it into a private temporary folder, scans only that folder, and deletes it after 30 minutes (so a re-scan does not re-upload).
+- **Git URL:** public `https://` repositories only. The server clones it shallowly into a temporary folder, scans it and deletes it right after the scan. Private and internal addresses are refused, as are non-https URLs, embedded credentials, other ports and redirects.
+- **Access:** every API call needs `Authorization: Bearer <AEGISSCAN_ACCESS_TOKEN>`. The UI asks for the token once and keeps it in the browser tab's session storage. The server will not start in hosted mode without a token of 16+ characters.
+- **Isolation:** server paths never reach the browser (results show `owner-repo` or the folder name, with paths relative to the code). There is no shared scan history, and a key typed into the UI is ignored. Scans are static-only by default, so no code is sent to an LLM.
+- **Limits:** 2 concurrent scans (others get "busy"), 10 scans and 10 uploads per client per 10 minutes, a 5-minute scan limit, and a 120 s clone limit. These counters live in memory, so run **one instance**.
+
+**Deploy on Render**
+
+1. Push the repository to GitHub or GitLab (Render deploys from a Git remote).
+2. In Render choose **New, Blueprint** and select the repo. [render.yaml](render.yaml) creates a Docker web service with a generated `AEGISSCAN_ACCESS_TOKEN` and `/api/health` as the health check.
+3. When the first deploy is live, open the service's **Environment** tab, copy the token, and share it only with people who should use the scanner.
+4. Semgrep needs real memory. If scans are killed or very slow, move the service to a larger plan.
+
+The image is built from the [Dockerfile](Dockerfile) (Node builds the UI, then Python 3.12 with git and semgrep runs the server as a non-root user). Run it locally with `docker run -p 10000:10000 -e AEGISSCAN_ACCESS_TOKEN=<16+ characters> aegisscan`.
+
+| Setting | Purpose |
+|---|---|
+| `AEGISSCAN_MODE=hosted` | Turns on hosted mode (the Docker image sets it) |
+| `AEGISSCAN_ACCESS_TOKEN` | Required. 16+ characters |
+| `PORT` | Port to listen on (Render sets it). Default 10000 in the image |
+| `AEGISSCAN_HOST` | Interface to bind. Default `0.0.0.0` in hosted mode |
+| `AEGISSCAN_ALLOWED_HOSTS` | Comma-separated extra host names, e.g. a custom domain. `RENDER_EXTERNAL_HOSTNAME` is added automatically |
+| `AEGISSCAN_HOSTED_LLM=1` | Allow LLM scans using the server's own `GROQ_API_KEY` (off by default) |
+| `AEGISSCAN_MAX_UPLOAD_MB`, `AEGISSCAN_MAX_UNPACKED_MB`, `AEGISSCAN_MAX_FILES`, `AEGISSCAN_SCAN_TIMEOUT_S`, `AEGISSCAN_MAX_CONCURRENT`, `AEGISSCAN_RATE_LIMIT` | Override the limits above |
+
+**Things to know before going public.** One shared token is access control, not user accounts: anyone with it can scan. A clone's size is checked after it finishes, and the host name is resolved once for the safety check and again by git, so a hostile DNS server could in principle race that check, which is one more reason to keep the token private. Uploaded folders are kept up to 30 minutes on the instance's temporary disk. Scan time depends on the instance: on a busy development machine a 4-file folder took 108 s while a one-file repository took 12 s, so size the plan from a real test. The Docker image has not been built in the environment this was written in (no Docker there); build it once and run a scan before relying on it.
+
 ---
 
 ## 🧪 Benchmark & Quality Calibration
@@ -177,6 +208,7 @@ MIT License — free for open-source and commercial use.
 | `AEGISSCAN_LLM_WORKERS`, `AEGISSCAN_LLM_RPM` | environment | Parallel LLM calls (default 4) and the global requests-per-minute cap (default 10) |
 | `AEGISSCAN_ALLOWED_ROOTS` | environment | Extra directories the web server may scan (`;` on Windows, `:` elsewhere). Default: project root only |
 | `AEGISSCAN_ALLOW_ANY_PATH` | environment | Set to `1` to let the web server scan any directory (opt-in; off by default). Prefer `AEGISSCAN_ALLOWED_ROOTS` when you can |
+| `AEGISSCAN_MODE` | environment | `hosted` switches the web server to uploads and Git URLs behind an access token. See "Hosting it" |
 | `exclude_dirs` | `.aegisscan.toml` in the scan target | Directory names skipped by Bandit and the optimizer (tests/ and examples/ are scanned by default) |
 
 Static tools: Bandit and the built-in optimizer ship with the package; install Semgrep with `pip install ".[static]"` and Gitleaks from its [releases page](https://github.com/gitleaks/gitleaks/releases). Missing tools are skipped, never fatal.

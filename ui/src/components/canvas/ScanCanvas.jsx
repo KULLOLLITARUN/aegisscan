@@ -18,7 +18,7 @@ const pinLabel = (f, sev, rel) =>
  */
 export default function ScanCanvas({
   scene, result, scanning, error, history, historyStatus,
-  selectedId, onSelect, hoverId, onHover, planeRef, visible, tilesDone, livePlane, onRun,
+  selectedId, onSelect, hoverId, onHover, planeRef, visible, tilesDone, livePlane, phase, onRun,
 }) {
   const { hosted } = useScan()
   const stageRef = useRef(null)
@@ -194,7 +194,7 @@ export default function ScanCanvas({
       </div>
 
       <div className="ag-phase ag-mono" role="status" aria-live="polite">
-        {loading ? <span>Scanning, <b>{livePlane != null ? Math.round(livePlane) : 0}%</b></span> : null}
+        {loading ? <span>Scanning{phase ? <>: <b>{phase}</b></> : null}</span> : null}
       </div>
 
       <div className="ag-hint">

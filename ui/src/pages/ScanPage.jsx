@@ -82,6 +82,7 @@ export default function ScanPage() {
           visible={visible}
           tilesDone={tilesDone}
           livePlane={scanning ? progress.pct : null}
+          phase={scanning ? progress.phase : ''}
           onRun={startScan}
         />
         <Timeline

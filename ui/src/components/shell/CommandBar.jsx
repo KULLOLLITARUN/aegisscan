@@ -70,7 +70,7 @@ export default function CommandBar() {
 
   let status = 'Idle'
   if (!config) status = 'Connecting'
-  else if (scanning) status = `Scanning, ${progress.pct}%`
+  else if (scanning) status = (progress.phase ? `Scanning: ${progress.phase}` : 'Scanning')
   else if (scanError) status = 'Scan failed'
   else if (scanResult) status = 'Scan ready'
 

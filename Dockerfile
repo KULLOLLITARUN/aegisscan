@@ -33,7 +33,7 @@ COPY --from=ui /app/scanner/server/dist ./scanner/server/dist
 RUN pip install ".[static]"
 
 # Never run as root: uploaded and cloned code is untrusted input.
-RUN useradd --create-home --uid 10001 aegis \
+RUN useradd --create-home --uid 1000 aegis \
     && mkdir -p /tmp/aegisscan-workspaces \
     && chown -R aegis:aegis /app /tmp/aegisscan-workspaces
 USER aegis

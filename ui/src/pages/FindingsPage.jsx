@@ -1,84 +1,92 @@
-import { useState } from 'react'
-import FindingsTable from '../components/FindingsTable'
+import { useMemo, useState } from 'react'
 import { useScan } from '../context/ScanContext'
-import { SEVERITIES, SEVERITY_LABEL, normSeverity } from '../constants'
+import { SEVERITIES, SEVERITY_LABEL, CATEGORIES, CATEGORY_LABEL, normSeverity, normCategory } from '../constants'
+import { relPath } from '../lib/paths'
+import { sortFindings } from '../lib/scene'
+import FindingTable from '../components/findings/FindingTable'
+import FindingDialog from '../components/findings/FindingDialog'
+import { usePageGate } from '../components/findings/usePageGate'
 
-const SEV_OPTIONS = ['All', ...SEVERITIES]
+const PER_PAGE = 15
 
 export default function FindingsPage() {
   const { scanResult } = useScan()
   const [search, setSearch] = useState('')
-  const [sev, setSev] = useState('All')
-  const [cat, setCat] = useState('All')
+  const [sev, setSev] = useState('all')
+  const [cat, setCat] = useState('all')
   const [page, setPage] = useState(1)
-  const PER_PAGE = 15
+  const [open, setOpen] = useState(null)
 
-  const allFindings = scanResult?.findings ?? []
-  const cats = ['All', ...new Set(allFindings.map(f => f.category).filter(Boolean))]
+  const all = useMemo(() => scanResult?.findings ?? [], [scanResult])
+  const cats = useMemo(() => CATEGORIES.filter((c) => all.some((f) => normCategory(f.category) === c)), [all])
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return sortFindings(all.filter((f) => {
+      if (sev !== 'all' && normSeverity(f.severity) !== sev) return false
+      if (cat !== 'all' && normCategory(f.category) !== cat) return false
+      if (!q) return true
+      return `${f.issue_type} ${relPath(f.file_path, scanResult?.target_path)} ${f.rule_source}`.toLowerCase().includes(q)
+    }))
+  }, [all, search, sev, cat, scanResult])
 
-  const filtered = allFindings.filter(f => {
-    const matchSev = sev === 'All' || normSeverity(f.severity) === sev
-    const matchCat = cat === 'All' || f.category === cat
-    const matchSearch = !search || f.issue_type?.toLowerCase().includes(search.toLowerCase())
-      || f.file_path?.toLowerCase().includes(search.toLowerCase())
-    return matchSev && matchCat && matchSearch
-  })
+  const gate = usePageGate('Findings')
+  if (gate) return gate
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE)
-  const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
-
-  const criticalCount = allFindings.filter(f => normSeverity(f.severity) === 'critical').length
-  const highCount = allFindings.filter(f => normSeverity(f.severity) === 'high').length
+  const pages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
+  const current = Math.min(page, pages)
+  const paged = filtered.slice((current - 1) * PER_PAGE, current * PER_PAGE)
+  const count = (s) => all.filter((f) => normSeverity(f.severity) === s).length
+  const filtering = search || sev !== 'all' || cat !== 'all'
+  const reset = (fn) => (e) => { fn(e.target.value); setPage(1) }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h1 className="display" style={{ fontSize: 21, fontWeight: 600, letterSpacing: '0.005em' }}>Findings</h1>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-          {filtered.length} findings · {criticalCount} critical · {highCount} high
+    <div className="ag-pagebody">
+      <header className="ag-pagehead">
+        <h1>Findings</h1>
+        <p className="ag-muted">
+          {filtered.length} of {all.length} findings, {count('critical')} critical, {count('high')} high
         </p>
-      </div>
+      </header>
 
-      {/* Filter Bar */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input
-          value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1) }}
-          placeholder="Search findings…"
-          style={{ minWidth: 200, flex: 1 }}
-        />
-        <select value={sev} onChange={e => { setSev(e.target.value); setPage(1) }}>
-          {SEV_OPTIONS.map(s => <option key={s} value={s}>{s === 'All' ? 'All' : SEVERITY_LABEL[s]}</option>)}
+      <div className="ag-toolbar">
+        <label className="visually-hidden" htmlFor="ag-f-search">Search findings</label>
+        <input id="ag-f-search" className="ag-input" placeholder="Search issue, file or source" autoComplete="off" value={search} onChange={reset(setSearch)} />
+        <label className="visually-hidden" htmlFor="ag-f-sev">Severity</label>
+        <select id="ag-f-sev" className="ag-input" value={sev} onChange={reset(setSev)}>
+          <option value="all">All severities</option>
+          {SEVERITIES.filter(count).map((s) => <option key={s} value={s}>{SEVERITY_LABEL[s]}</option>)}
         </select>
-        <select value={cat} onChange={e => { setCat(e.target.value); setPage(1) }}>
-          {cats.map(c => <option key={c}>{c}</option>)}
+        <label className="visually-hidden" htmlFor="ag-f-cat">Category</label>
+        <select id="ag-f-cat" className="ag-input" value={cat} onChange={reset(setCat)}>
+          <option value="all">All categories</option>
+          {cats.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
         </select>
-        {(search || sev !== 'All' || cat !== 'All') && (
-          <button type="button" className="btn btn-ghost" onClick={() => { setSearch(''); setSev('All'); setCat('All'); setPage(1) }}>
-            Clear
+        {filtering && (
+          <button type="button" className="ag-btn ag-btn--ghost" onClick={() => { setSearch(''); setSev('all'); setCat('all'); setPage(1) }}>
+            Clear filters
           </button>
         )}
       </div>
 
-      {/* Table */}
-      <div className="card">
-        <FindingsTable findings={paged} showTitle={false} />
+      {filtered.length ? (
+        <>
+          <FindingTable findings={paged} target={scanResult.target_path} selectedId={open?.id} onSelect={setOpen} />
+          {pages > 1 && (
+            <nav className="ag-pager" aria-label="Findings pages">
+              <button type="button" className="ag-btn ag-btn--sm" disabled={current === 1} onClick={() => setPage(current - 1)}>Previous</button>
+              <span className="ag-mono" aria-live="polite">Page {current} of {pages}</span>
+              <button type="button" className="ag-btn ag-btn--sm" disabled={current === pages} onClick={() => setPage(current + 1)}>Next</button>
+            </nav>
+          )}
+        </>
+      ) : (
+        <div className="ag-state">
+          <h3>No findings match</h3>
+          <p>Try a different severity or category, or clear the search.</p>
+        </div>
+      )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 16 }}>
-            <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
-              disabled={page === 1} onClick={() => setPage(p => p - 1)}>←</button>
-            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map(p => (
-              <button type="button" key={p} onClick={() => setPage(p)} className={p === page ? 'btn btn-primary' : 'btn btn-ghost'} style={{ padding: '4px 10px', fontSize: 12 }}>
-                {p}
-              </button>
-            ))}
-            <button type="button" className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }}
-              disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>→</button>
-          </div>
-        )}
-      </div>
+      {open && <FindingDialog finding={open} result={scanResult} onClose={() => setOpen(null)} />}
     </div>
   )
 }

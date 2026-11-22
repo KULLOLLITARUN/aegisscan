@@ -232,3 +232,45 @@ select.ag-input { padding-right: var(--space-md); }
   .ag-inspector { grid-row: 4; border-left: 0; border-top: var(--rule-hair) solid var(--line); height: 70dvh; min-height: 520px; }
   .ag-page { grid-row: 2; grid-column: 1; padding: var(--space-md); overflow: visible; }
 }
+
+/* ---------- list pages: Findings, Files, Logs ---------- */
+.ag-pagebody { display: grid; gap: var(--space-lg); max-width: 1200px; }
+.ag-pagehead { display: grid; gap: var(--space-2xs); }
+.ag-pagehead h1 { font-size: var(--text-2xl); letter-spacing: -0.03em; font-weight: 600; margin: 0; }
+.ag-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
+.ag-toolbar .ag-input:first-of-type { flex: 1 1 220px; min-width: 0; }
+.ag-tablewrap { overflow-x: auto; border: var(--rule-hair) solid var(--line); background: var(--paper-2); }
+.ag-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.ag-table th { text-align: left; font-weight: 500; font-size: var(--text-xs); color: var(--muted); padding: var(--space-sm) var(--space-md); border-bottom: var(--rule-hair) solid var(--line); background: var(--paper-3); white-space: nowrap; }
+.ag-table td { padding: var(--space-sm) var(--space-md); border-bottom: var(--rule-hair) solid var(--line-2); vertical-align: top; }
+.ag-table tbody tr { cursor: pointer; box-shadow: inset 3px 0 0 transparent; }
+.ag-table tbody tr:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); }
+.ag-table tbody tr.sel { background: var(--paper-3); box-shadow: inset 3px 0 0 var(--accent); }
+.ag-table .ag-right { text-align: right; }
+.ag-table .ag-loc { overflow-wrap: anywhere; font-size: var(--text-xs); }
+.ag-table .ag-sevline { white-space: nowrap; }
+.ag-link { background: none; border: 0; padding: 0; text-align: left; font-weight: 500; color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.ag-link:hover { text-decoration-color: var(--accent); }
+.ag-pager { display: flex; align-items: center; justify-content: center; gap: var(--space-md); font-size: var(--text-sm); }
+.ag-split { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+.ag-filelist { border: var(--rule-hair) solid var(--line); background: var(--paper-2); max-height: 70dvh; overflow: auto; }
+.ag-filerow { width: 100%; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: var(--space-sm); align-items: center; padding: var(--space-sm) var(--space-md); background: none; border: 0; border-radius: 0; border-bottom: var(--rule-hair) solid var(--line-2); text-align: left; cursor: pointer; box-shadow: inset 3px 0 0 transparent; }
+.ag-filerow:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); }
+.ag-filerow[aria-current="true"] { background: var(--paper-3); box-shadow: inset 3px 0 0 var(--accent); }
+.ag-filename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
+.ag-pathline { font-size: var(--text-xs); color: var(--muted); margin: 0 0 var(--space-sm); overflow-wrap: anywhere; }
+.ag-box { border: var(--rule-hair) solid var(--line); background: var(--paper-2); }
+.ag-log.tall { max-height: calc(100dvh - 230px); min-height: 200px; overflow: auto; }
+.ag-page .ag-state { padding-inline: 0; }
+
+/* finding dialog (modal inspector for the list pages) */
+.ag-scrim { position: fixed; inset: 0; z-index: 400; background: color-mix(in oklab, var(--ink) 40%, transparent); animation: ag-fade var(--dur-short) var(--ease-out); }
+.ag-dialog { position: fixed; top: 0; right: 0; bottom: 0; z-index: 401; width: min(620px, 100vw); overflow: auto; background: var(--paper-2); border-left: var(--rule-hair) solid var(--ink); animation: ag-dock var(--dur-short) var(--ease-out); }
+.ag-dialog-head { position: sticky; top: 0; z-index: 2; display: flex; justify-content: flex-end; padding: var(--space-sm) var(--space-md); background: var(--paper-2); border-bottom: var(--rule-hair) solid var(--line-2); }
+@keyframes ag-fade { from { opacity: 0; } }
+@keyframes ag-dock { from { transform: translateX(24px); opacity: 0; } }
+
+@media (max-width: 62rem) {
+  .ag-split { grid-template-columns: minmax(0, 1fr); }
+  .ag-filelist { max-height: 240px; }
+}

@@ -28,7 +28,15 @@ export default function Evidence({ finding, result, scanning }) {
   const sev = normSeverity(finding.severity)
   const loc = `${relPath(finding.file_path, result?.target_path)}:${finding.line_start}${finding.line_end && finding.line_end !== finding.line_start ? `-${finding.line_end}` : ''}`
   const start = Number.isFinite(finding.line_start) && finding.line_start > 0 ? finding.line_start : null
-  const evidenceLines = String(finding.evidence ?? '').replace(/\r\n/g, '\n').split('\n')
+  const rawLines = String(finding.evidence ?? '').replace(/\r\n/g, '\n').split('\n')
+  // Some tools (bandit) already prefix each snippet line with its line number: use those, do not number twice.
+  const embedded = rawLines.some((l) => l.trim()) && rawLines.filter((l) => l.trim()).every((l) => /^\s*\d+(\s|$)/.test(l))
+  const evidenceLines = rawLines
+    .map((l, i) => {
+      const m = embedded ? l.match(/^\s*(\d+)(?:\s(.*))?$/) : null
+      return m ? { n: Number(m[1]), text: m[2] ?? '' } : { n: start ? start + i : null, text: l }
+    })
+    .filter((l, i, a) => !(embedded && l.text.trim() === '' && i === a.length - 1))
   const diff = finding.fix_patch ? parseDiff(finding.fix_patch) : null
   const fixText = finding.fix_patch || finding.suggested_fix || ''
 
@@ -61,8 +69,12 @@ export default function Evidence({ finding, result, scanning }) {
         {finding.evidence ? (
           <Code>
             {evidenceLines.map((l, i) => (
-              <span key={i} className="hit" style={{ '--sev': `var(--sev-${sev})` }}>
-                <span className="ln">{start ? start + i : ''}</span>{highlight(l)}
+              <span
+                key={i}
+                className={!embedded || (l.n >= finding.line_start && l.n <= (finding.line_end ?? finding.line_start)) ? 'hit' : undefined}
+                style={{ '--sev': `var(--sev-${sev})` }}
+              >
+                <span className="ln">{l.n ?? ''}</span>{highlight(l.text)}
               </span>
             ))}
           </Code>

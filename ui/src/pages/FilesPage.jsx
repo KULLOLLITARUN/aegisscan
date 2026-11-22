@@ -1,109 +1,91 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useScan } from '../context/ScanContext'
-import FindingDrawer from '../components/FindingDrawer'
-import { SEVERITIES, normSeverity, normCategory } from '../constants'
+import { SEVERITIES, SEVERITY_LABEL, normSeverity } from '../constants'
+import { relPath, baseName } from '../lib/paths'
+import { sortFindings } from '../lib/scene'
+import FindingTable from '../components/findings/FindingTable'
+import FindingDialog from '../components/findings/FindingDialog'
+import { usePageGate } from '../components/findings/usePageGate'
 
-function topSeverity(fs) {
-  for (const s of SEVERITIES) if (fs.some(f => normSeverity(f.severity) === s)) return s
-  return 'info'
-}
+const topSeverity = (fs) => SEVERITIES.find((s) => fs.some((f) => normSeverity(f.severity) === s)) ?? 'info'
 
 export default function FilesPage() {
   const { scanResult } = useScan()
   const [selectedFile, setSelectedFile] = useState(null)
-  const [selectedFinding, setSelectedFinding] = useState(null)
-  const findings = scanResult?.findings ?? []
+  const [open, setOpen] = useState(null)
 
-  const fileMap = {}
-  findings.forEach(f => {
-    const key = f.file_path || 'unknown'
-    if (!fileMap[key]) fileMap[key] = []
-    fileMap[key].push(f)
-  })
+  const files = useMemo(() => {
+    const map = new Map()
+    for (const f of scanResult?.findings ?? []) {
+      const key = relPath(f.file_path || 'unknown', scanResult?.target_path)
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push(f)
+    }
+    return [...map.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+  }, [scanResult])
 
-  const files = Object.entries(fileMap).sort((a, b) => b[1].length - a[1].length)
-  const selected = selectedFile ? fileMap[selectedFile] ?? [] : []
+  const gate = usePageGate('Files')
+  if (gate) return gate
+
+  const selected = files.find(([p]) => p === selectedFile)?.[1] ?? []
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h1 className="display" style={{ fontSize: 21, fontWeight: 600, letterSpacing: '0.005em' }}>Files</h1>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-          {files.length} files with findings
+    <div className="ag-pagebody">
+      <header className="ag-pagehead">
+        <h1>Files</h1>
+        <p className="ag-muted">
+          {files.length} {files.length === 1 ? 'file' : 'files'} with findings
+          {scanResult.files_analyzed > files.length ? `, ${scanResult.files_analyzed - files.length} analysed files have none` : ''}
         </p>
-      </div>
+      </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16 }}>
-        {/* File tree */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Project Files
-          </div>
-          <div style={{ overflow: 'auto', maxHeight: 600 }}>
-            {!files.length ? (
-              <div style={{ padding: '20px 14px', fontSize: 12, color: 'var(--text-muted)' }}>No scan data</div>
-            ) : files.map(([path, fs]) => {
-              const fname = path.split(/[/\\]/).pop()
-              const sev = topSeverity(fs)
-              const isSelected = selectedFile === path
+      <div className="ag-split">
+        <nav className="ag-filelist" aria-label="Files with findings">
+          <ul>
+            {files.map(([path, fs]) => {
+              const s = topSeverity(fs)
               return (
-                <button key={path} type="button" onClick={() => setSelectedFile(path)} style={{
-                  width: '100%', textAlign: 'left', border: 'none',
-                  padding: '9px 14px', cursor: 'pointer', fontSize: 12,
-                  display: 'flex', alignItems: 'center', gap: 9,
-                  background: isSelected ? 'var(--accent-dim)' : 'transparent',
-                  borderLeft: isSelected ? '2px solid var(--accent)' : '2px solid transparent',
-                  color: 'inherit', fontFamily: 'inherit',
-                }}>
-                  <span className="diamond" style={{ background: `var(--${sev})`, flexShrink: 0 }} />
-                  <span className="mono" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>
-                    {fname}
-                  </span>
-                  <span className="sev-badge" data-sev={sev} style={{ padding: '1px 7px' }}>{fs.length}</span>
-                </button>
+                <li key={path}>
+                  <button
+                    type="button"
+                    className="ag-filerow"
+                    aria-current={path === selectedFile ? 'true' : undefined}
+                    onClick={() => setSelectedFile(path)}
+                    title={path}
+                  >
+                    <i className={`ag-sq s-${s}`} />
+                    <span className="visually-hidden">Worst severity {SEVERITY_LABEL[s]}, </span>
+                    <span className="ag-mono ag-filename">{baseName(path)}</span>
+                    <span className="ag-num">{fs.length}</span>
+                  </button>
+                </li>
               )
             })}
-          </div>
-        </div>
+          </ul>
+        </nav>
 
-        {/* Right panel */}
-        <div className="card">
+        <section aria-label="Findings in the selected file">
           {!selectedFile ? (
-            <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--text-muted)', fontSize: 13 }}>
-              ← Select a file from the tree
+            <div className="ag-state">
+              <h3>Select a file</h3>
+              <p>Pick a file to list the findings in it.</p>
             </div>
           ) : (
             <>
-              <div style={{ marginBottom: 16 }}>
-                <div className="mono" style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 4 }}>{selectedFile}</div>
-                <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--text-muted)' }}>
-                  <span>Findings: <strong style={{ color: 'var(--text-primary)' }}>{selected.length}</strong></span>
-                  <span>Language: <strong style={{ color: 'var(--text-primary)' }}>{selected[0]?.language || 'Python'}</strong></span>
-                </div>
-              </div>
-
-              <table className="data-table">
-                <thead>
-                  <tr><th>Line</th><th>Issue</th><th>Category</th><th>Severity</th><th>Confidence</th></tr>
-                </thead>
-                <tbody>
-                  {selected.map((f, i) => (
-                    <tr key={f.id || f.finding_id || i} onClick={() => setSelectedFinding(f)}>
-                      <td className="mono" style={{ fontSize: 11, color: 'var(--accent)' }}>{f.line_start}</td>
-                      <td style={{ fontWeight: 500 }}>{f.issue_type}</td>
-                      <td><span className="cat-tag" data-cat={normCategory(f.category)}>{f.category}</span></td>
-                      <td><span className="sev-badge" data-sev={normSeverity(f.severity)}>{f.severity}</span></td>
-                      <td className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{((f.confidence || 0) * 100).toFixed(0)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <p className="ag-mono ag-pathline">{selectedFile}</p>
+              <FindingTable
+                findings={sortFindings(selected)}
+                target={scanResult.target_path}
+                selectedId={open?.id}
+                onSelect={setOpen}
+                showFile={false}
+              />
             </>
           )}
-        </div>
+        </section>
       </div>
 
-      {selectedFinding && <FindingDrawer finding={selectedFinding} onClose={() => setSelectedFinding(null)} />}
+      {open && <FindingDialog finding={open} result={scanResult} onClose={() => setOpen(null)} />}
     </div>
   )
 }

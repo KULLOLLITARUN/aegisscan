@@ -1,24 +1,24 @@
 import { useScan } from '../context/ScanContext'
-import LiveActivity from '../components/LiveActivity'
+import ActivityLog from '../components/inspector/ActivityLog'
 
 export default function LogsPage() {
   const { logs, scanning } = useScan()
-  const counts = logs.reduce((acc, l) => { acc[l.level] = (acc[l.level] || 0) + 1; return acc }, {})
+  const warn = logs.filter((l) => l.level === 'warn').length
+  const err = logs.filter((l) => l.level === 'err').length
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }} className="display">Live Log</h1>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-          {logs.length ? `${logs.length} events this session` : 'No events yet'}
-          {counts.warn ? ` · ${counts.warn} warning${counts.warn === 1 ? '' : 's'}` : ''}
-          {counts.err ? ` · ${counts.err} error${counts.err === 1 ? '' : 's'}` : ''}
-          {scanning ? ' · scan in progress' : ''}
+    <div className="ag-pagebody">
+      <header className="ag-pagehead">
+        <h1>Logs</h1>
+        <p className="ag-muted" role="status">
+          {logs.length ? `${logs.length} ${logs.length === 1 ? 'event' : 'events'} this session` : 'No events yet'}
+          {warn ? `, ${warn} ${warn === 1 ? 'warning' : 'warnings'}` : ''}
+          {err ? `, ${err} ${err === 1 ? 'error' : 'errors'}` : ''}
+          {scanning ? ', scan in progress' : ''}
         </p>
-      </div>
-
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <LiveActivity maxHeight={560} showFooter={false} />
+      </header>
+      <div className="ag-box">
+        <ActivityLog logs={logs} scanning={scanning} nowSeconds={null} tall />
       </div>
     </div>
   )

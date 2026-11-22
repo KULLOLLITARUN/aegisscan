@@ -2,11 +2,13 @@
 rem AegisScan launcher for Windows.
 rem Builds the React UI if it has not been built yet (or when you pass --rebuild),
 rem then starts the web server. Usage:
-rem   run_aegisscan.bat [--rebuild] [--allow "D:\some\folder"] [port]
+rem   run_aegisscan.bat [--rebuild] [--allow "D:\some\folder"] [--allow-any] [port]
 rem
 rem The server only scans inside this project unless more folders are allowed.
 rem --allow can be repeated; the folders are added to AEGISSCAN_ALLOWED_ROOTS (which you can
 rem also set yourself before running this file).
+rem --allow-any lets the server scan ANY folder (sets AEGISSCAN_ALLOW_ANY_PATH=1). It is off by
+rem default; the localhost-only Host/Origin checks still apply.
 rem
 rem Calls node directly instead of "npm run" because this project's folder name
 rem contains "&", which cmd.exe would split on.
@@ -20,6 +22,11 @@ set "PORT=8000"
 if "%~1"=="" goto args_done
 if /i "%~1"=="--rebuild" (
     set "REBUILD=1"
+    shift
+    goto args
+)
+if /i "%~1"=="--allow-any" (
+    set "AEGISSCAN_ALLOW_ANY_PATH=1"
     shift
     goto args
 )
@@ -79,6 +86,6 @@ if "%REBUILD%"=="1" (
 :start_server
 echo.
 echo Starting AegisScan on http://localhost:%PORT%  (Ctrl+C to stop)
-if defined AEGISSCAN_ALLOWED_ROOTS (echo Extra scan roots: !AEGISSCAN_ALLOWED_ROOTS!) else (echo Scans are limited to this project folder. Use --allow "folder" to add more.)
+if "%AEGISSCAN_ALLOW_ANY_PATH%"=="1" (echo WARNING: --allow-any is on. The server will scan any folder on this machine.) else if defined AEGISSCAN_ALLOWED_ROOTS (echo Extra scan roots: !AEGISSCAN_ALLOWED_ROOTS!) else (echo Scans are limited to this project folder. Use --allow "folder" or --allow-any.)
 "%PY%" main.py --server --port %PORT%
 endlocal

@@ -11,7 +11,7 @@ export function describeScanError(message) {
       // The server's trailing "Set AEGISSCAN_ALLOWED_ROOTS..." sentence is covered by the hint below.
       detail: `${text.split(/\.\s+Set\s/)[0].replace(/\.$/, '')}.`,
       hint:
-        'Pick a folder inside the project, or restart the server with AEGISSCAN_ALLOWED_ROOTS set to a folder that contains your target. With the Windows launcher: run_aegisscan.bat --allow "D:\\path\\to\\folder".',
+        'Pick a folder inside the project, or restart the server with AEGISSCAN_ALLOWED_ROOTS set to a folder that contains your target. With the Windows launcher: run_aegisscan.bat --allow "D:\\path\\to\\folder", or --allow-any to scan any folder.',
       retryable: false,
     }
   }

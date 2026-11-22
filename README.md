@@ -120,7 +120,7 @@ The dashboard is a single "survey console" (design source: `Plans/ui_redesign_v3
 - **Inspector:** *Findings* (search, severity chips, sort), *Evidence* (syntax colouring, suggested fix or patch, Copy patch) and *Activity* (the live SSE log).
 - **Findings, Files and Logs pages:** the full finding table with filters and paging, a per-file view, and the complete log. Clicking a finding opens the same evidence view in a dialog. History lists past scans from the SQLite database.
 
-The server only scans inside the project folder plus any folders in `AEGISSCAN_ALLOWED_ROOTS`. Scanning a folder outside that list shows an explanation and a "Change target" button instead of a retry. On Windows, `run_aegisscan.bat --allow "D:\path\to\folder"` adds a folder for that run (repeatable; `run_aegisscan.bat [--rebuild] [--allow "folder"] [port]`).
+The server only scans inside the project folder plus any folders in `AEGISSCAN_ALLOWED_ROOTS`. Scanning a folder outside that list shows an explanation and a "Change target" button instead of a retry. On Windows, `run_aegisscan.bat --allow "D:\path\to\folder"` adds a folder for that run (repeatable; `run_aegisscan.bat [--rebuild] [--allow "folder"] [--allow-any] [port]`). To scan any folder, set `AEGISSCAN_ALLOW_ANY_PATH=1` or pass `--allow-any`; it is off by default, the server prints a warning when it is on, and the localhost-only `Host`/`Origin` checks still apply.
 
 Every region has loading, empty and error states. All numbers come from the scan result or `/api/history`; nothing is estimated.
 
@@ -176,6 +176,7 @@ MIT License — free for open-source and commercial use.
 | `AEGISSCAN_GROQ_MODELS` | environment | Comma-separated Groq model ids (first is the default). Retired/unknown models are skipped automatically |
 | `AEGISSCAN_LLM_WORKERS`, `AEGISSCAN_LLM_RPM` | environment | Parallel LLM calls (default 4) and the global requests-per-minute cap (default 10) |
 | `AEGISSCAN_ALLOWED_ROOTS` | environment | Extra directories the web server may scan (`;` on Windows, `:` elsewhere). Default: project root only |
+| `AEGISSCAN_ALLOW_ANY_PATH` | environment | Set to `1` to let the web server scan any directory (opt-in; off by default). Prefer `AEGISSCAN_ALLOWED_ROOTS` when you can |
 | `exclude_dirs` | `.aegisscan.toml` in the scan target | Directory names skipped by Bandit and the optimizer (tests/ and examples/ are scanned by default) |
 
 Static tools: Bandit and the built-in optimizer ship with the package; install Semgrep with `pip install ".[static]"` and Gitleaks from its [releases page](https://github.com/gitleaks/gitleaks/releases). Missing tools are skipped, never fatal.

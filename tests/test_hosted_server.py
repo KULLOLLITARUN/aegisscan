@@ -104,7 +104,7 @@ def test_config_endpoint_needs_no_token_and_describes_hosted_mode() -> None:
     h.do_GET()
     cfg = _json(h)
     assert cfg["mode"] == "hosted" and cfg["auth_required"] is True
-    assert cfg["features"] == {"path": False, "upload": True, "git": True, "llm": False}
+    assert cfg["features"] == {"path": False, "upload": True, "git": True, "llm": False, "history": False}
     assert cfg["limits"]["max_upload_mb"] == 50
 
 
@@ -349,6 +349,20 @@ def test_sanitize_text_and_result(tmp_path) -> None:
     result = _result_for(root)
     hosted.sanitize_result(result, root, "my-app")
     assert result.target_path == Path("my-app") and result.findings[0].file_path == Path("a.py")
+
+
+def test_delete_workspace_removes_read_only_files() -> None:
+    """git marks pack files read-only; a plain rmtree(ignore_errors=True) leaves them behind on Windows."""
+    import os
+    import stat
+
+    _, ws = hosted.new_workspace()
+    pack = hosted.code_dir(ws) / ".git" / "objects" / "pack" / "pack-1.pack"
+    pack.parent.mkdir(parents=True)
+    pack.write_text("data", encoding="utf-8")
+    os.chmod(pack, stat.S_IREAD)
+    hosted.delete_workspace(ws)
+    assert not ws.exists()
 
 
 def test_workspace_sweep_removes_only_old_workspaces() -> None:

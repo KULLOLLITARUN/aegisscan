@@ -93,6 +93,7 @@ def public_config() -> dict[str, Any]:
             "upload": hosted,
             "git": hosted,
             "llm": (not hosted) or llm_enabled(),
+            "history": not hosted,
         },
         "limits": {
             "max_upload_mb": max_upload_bytes() // MB,
@@ -220,7 +221,13 @@ def run_with_timeout(fn: Callable[[], Any], timeout: float, on_finish: Callable[
                     pass
 
     thread = threading.Thread(target=_worker, name="aegisscan-hosted-scan", daemon=True)
-    thread.start()
+    try:
+        thread.start()
+    except RuntimeError:
+        # No worker ever ran, so nothing else will release the slot or clean up.
+        if on_finish:
+            on_finish()
+        raise
     thread.join(timeout)
     if thread.is_alive():
         raise ScanTimeout(f"The scan took longer than {int(timeout)} seconds and was stopped.")
@@ -271,8 +278,27 @@ def get_workspace(workspace_id: str) -> Path | None:
     return path if (path / "code").is_dir() else None
 
 
+def remove_tree(path: Path) -> None:
+    """Delete a folder tree even when it holds read-only files (git marks its pack files read-only,
+    and plain rmtree(ignore_errors=True) silently leaves them behind on Windows)."""
+    import stat
+    import sys
+
+    def _make_writable_and_retry(func, target, *_exc_info) -> None:
+        try:
+            os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+            func(target)
+        except OSError:
+            pass  # best effort; the TTL sweep tries again later
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=_make_writable_and_retry)
+    else:
+        shutil.rmtree(path, onerror=_make_writable_and_retry)
+
+
 def delete_workspace(path: Path) -> None:
-    shutil.rmtree(path, ignore_errors=True)
+    remove_tree(path)
 
 
 def sweep(ttl_seconds: int = DEFAULT_WORKSPACE_TTL_S) -> int:
@@ -285,7 +311,7 @@ def sweep(ttl_seconds: int = DEFAULT_WORKSPACE_TTL_S) -> int:
     for child in root.iterdir():
         try:
             if child.is_dir() and child.stat().st_mtime < cutoff:
-                shutil.rmtree(child, ignore_errors=True)
+                remove_tree(child)
                 removed += 1
         except OSError:
             continue
@@ -314,3 +340,220 @@ def sanitize_result(result: Any, root: Path, label: str) -> None:
             except ValueError:
                 continue
     result.target_path = Path(label)
+
+
+# ---------------------------------------------------------------- uploads
+class UploadError(ValueError):
+    """A rejected upload. `status` is the HTTP status to answer with."""
+
+    def __init__(self, message: str, status: int = 400) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+_COPY_CHUNK = 64 * 1024
+_BOMB_RATIO = 100            # a single file expanding more than this ...
+_BOMB_MIN_BYTES = 5 * MB     # ... and larger than this is treated as a decompression bomb
+
+
+def clean_label(raw: str | None, default: str = "uploaded-folder") -> str:
+    """A safe display name from a client-supplied name: no path parts, no odd characters."""
+    name = re.split(r"[\\/]", str(raw or ""))[-1]
+    name = re.sub(r"\.zip$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"[^A-Za-z0-9._ -]", "", name).strip(" .-")
+    return name[:60] or default
+
+
+def _safe_member_path(name: str) -> str:
+    """Normalise a zip member name and reject anything that could escape the destination."""
+    cleaned = name.replace("\\", "/")
+    if "\x00" in cleaned or cleaned.startswith("/") or re.match(r"^[A-Za-z]:", cleaned):
+        raise UploadError("The zip contains an absolute path, which is not allowed.")
+    parts = [p for p in cleaned.split("/") if p not in ("", ".")]
+    if any(p == ".." for p in parts):
+        raise UploadError("The zip contains a path that leaves its folder, which is not allowed.")
+    return "/".join(parts)
+
+
+def extract_zip(data: bytes, dest: Path) -> tuple[int, int]:
+    """Safely unpack an uploaded zip into dest. Returns (files, bytes written).
+
+    Rejects path traversal and absolute paths, skips symlinks, refuses encrypted entries, caps the
+    file count and the real number of bytes written (header sizes are not trusted), and refuses
+    single entries with a decompression-bomb ratio.
+    """
+    import io
+    import stat
+    import zipfile
+
+    file_limit = max_files()
+    byte_limit = max_unpacked_bytes()
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise UploadError("That is not a valid zip file.") from exc
+
+    dest_resolved = dest.resolve()
+    files = 0
+    written = 0
+    with archive:
+        infos = archive.infolist()
+        if len(infos) > file_limit * 2:  # directories count too; fail fast on absurd archives
+            raise UploadError(f"The zip has too many entries (limit {file_limit} files).", 413)
+        for info in infos:
+            if info.is_dir():
+                continue
+            if info.flag_bits & 0x1:
+                raise UploadError("The zip contains encrypted files, which cannot be scanned.")
+            if stat.S_ISLNK(info.external_attr >> 16):
+                continue  # never create symlinks from untrusted archives
+            rel = _safe_member_path(info.filename)
+            if not rel:
+                continue
+            files += 1
+            if files > file_limit:
+                raise UploadError(f"The zip has more than {file_limit} files. Remove generated or vendored folders.", 413)
+            if info.compress_size and info.file_size > _BOMB_MIN_BYTES and info.file_size / info.compress_size > _BOMB_RATIO:
+                raise UploadError("The zip looks like a decompression bomb and was rejected.")
+            target = (dest / rel).resolve()
+            if dest_resolved not in target.parents:
+                raise UploadError("The zip contains a path that leaves its folder, which is not allowed.")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(info) as src, open(target, "wb") as out:
+                while True:
+                    chunk = src.read(_COPY_CHUNK)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > byte_limit:
+                        raise UploadError(
+                            f"The unpacked folder is larger than {byte_limit // MB} MB.", 413
+                        )
+                    out.write(chunk)
+    if files == 0:
+        raise UploadError("The zip contains no files to scan.")
+    return files, written
+
+
+# ---------------------------------------------------------------- Git URLs
+class GitError(ValueError):
+    """A rejected or failed clone. Messages are safe to show to users (no server paths)."""
+
+    def __init__(self, message: str, status: int = 400) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+_MAX_URL_LENGTH = 300
+_CLONE_TIMEOUT_S = 120
+
+
+def _host_addresses(host: str) -> list[str]:
+    import socket
+
+    try:
+        return sorted({str(info[4][0]) for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)})
+    except socket.gaierror as exc:
+        raise GitError("That host name could not be found.") from exc
+
+
+def validate_git_url(raw: str) -> str:
+    """Accept only plain public https:// repository URLs.
+
+    Blocks other schemes, embedded credentials, odd ports, and any host that resolves to a private,
+    loopback, link-local or otherwise non-public address, so the server cannot be pointed at
+    internal services (SSRF). Redirects are disabled at clone time as well.
+    """
+    import ipaddress
+    from urllib.parse import urlparse
+
+    url = (raw or "").strip()
+    if not url or len(url) > _MAX_URL_LENGTH or re.search(r"[\s\x00-\x1f]", url):
+        raise GitError("Enter a valid https Git URL, for example https://github.com/owner/repo.")
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise GitError("Only https:// Git URLs are supported.")
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if not host or host == "localhost" or host.endswith((".local", ".internal")):
+        raise GitError("That host is not allowed.")
+    if parsed.username or parsed.password:
+        raise GitError("Git URLs with a username or password are not supported.")
+    if parsed.port not in (None, 443):
+        raise GitError("Only the standard https port is supported.")
+    if len([seg for seg in parsed.path.split("/") if seg]) < 1:
+        raise GitError("The URL must point at a repository, for example https://github.com/owner/repo.")
+    for address in _host_addresses(host):
+        try:
+            ip = ipaddress.ip_address(address.split("%")[0])
+        except ValueError as exc:
+            raise GitError("That host could not be verified.") from exc
+        if not ip.is_global:
+            raise GitError("That host points to a private address and is not allowed.")
+    return url
+
+
+def repo_label(url: str) -> str:
+    """owner/repo from a Git URL, as a safe display name."""
+    from urllib.parse import urlparse
+
+    segments = [s for s in urlparse(url).path.split("/") if s]
+    if segments and segments[-1].endswith(".git"):
+        segments[-1] = segments[-1][:-4]
+    return clean_label("/".join(segments[-2:]).replace("/", "-"), default="repository")
+
+
+def _clone_env(home: Path) -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items() if k in ("PATH", "SYSTEMROOT", "SystemRoot", "TEMP", "TMP", "TMPDIR")}
+    env.update({
+        "HOME": str(home),
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_ASKPASS": "",
+        "GCM_INTERACTIVE": "never",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+    })
+    return env
+
+
+def clone_repo(url: str, dest: Path, timeout: float = _CLONE_TIMEOUT_S) -> None:
+    """Shallow-clone a validated URL into the empty folder `dest`, then drop the .git folder.
+
+    No hooks or templates, https only, no redirects, no prompts, no inherited git config or secrets
+    from the environment, a hard time limit, and the same size and file-count caps as uploads.
+    """
+    import subprocess
+
+    command = [
+        "git",
+        "-c", "protocol.allow=never",
+        "-c", "protocol.https.allow=always",
+        "-c", "http.followRedirects=false",
+        "-c", "core.symlinks=false",
+        "clone", "--quiet", "--depth", "1", "--single-branch", "--no-tags", "--template=", "--",
+        url, str(dest),
+    ]
+    try:
+        completed = subprocess.run(  # noqa: S603 - fixed argument list, URL validated above
+            command, cwd=str(dest.parent), env=_clone_env(dest.parent), stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=timeout, check=False,
+        )
+    except FileNotFoundError as exc:
+        raise GitError("Git is not available on this server.", 501) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise GitError(f"Cloning took longer than {int(timeout)} seconds and was stopped.", 504) from exc
+    if completed.returncode != 0:
+        raise GitError("Could not clone that repository. Check the URL and that the repository is public.")
+
+    remove_tree(dest / ".git")
+    files = 0
+    size = 0
+    for entry in dest.rglob("*"):
+        if entry.is_symlink():
+            entry.unlink(missing_ok=True)  # never follow links out of the clone
+        elif entry.is_file():
+            files += 1
+            size += entry.stat().st_size
+            if files > max_files():
+                raise GitError(f"The repository has more than {max_files()} files.", 413)
+            if size > max_unpacked_bytes():
+                raise GitError(f"The repository is larger than {max_unpacked_bytes() // MB} MB.", 413)

@@ -161,6 +161,12 @@ class _SSELogHandler(logging.Handler):
 class AegisScanRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the AegisScan web server."""
 
+    def setup(self) -> None:
+        # Hosted mode: a client that stalls mid-request must not hold a server thread forever.
+        super().setup()
+        if hosted.is_hosted():
+            self.connection.settimeout(120)
+
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         log.debug(format, *args)
 
@@ -302,8 +308,62 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             if not self._api_gate():
                 return
             self._handle_scan(self._read_json_body(), stream=path.endswith("/stream"))
+        elif path == "/api/upload":
+            if not self._api_gate():
+                return
+            self._handle_upload()
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
+
+    # ------------------------------------------------------------------ upload (hosted mode)
+    def _handle_upload(self) -> None:
+        """Receive a zip of the user's folder, unpack it safely into a private workspace and return
+        an upload_id that /api/scan can use. The workspace is deleted after a time limit."""
+        if not hosted.is_hosted():
+            self._send_json({"error": "Uploads are only available in hosted mode."}, status=HTTPStatus.NOT_FOUND)
+            return
+        if not hosted.upload_limiter().allow(hosted.client_ip(self.headers, self.client_address)):
+            self._send_json(
+                {"error": "Too many uploads from your address. Wait a few minutes and try again."},
+                status=HTTPStatus.TOO_MANY_REQUESTS,
+            )
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            length = 0
+        if length <= 0:
+            self._send_json({"error": "The upload is empty."}, status=HTTPStatus.LENGTH_REQUIRED)
+            return
+        limit = hosted.max_upload_bytes()
+        if length > limit:
+            self._send_json(
+                {"error": f"The upload is larger than {limit // hosted.MB} MB. Leave out large or generated folders and try again."},
+                status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+            return
+
+        data = self.rfile.read(length)
+        if len(data) != length:
+            self._send_json({"error": "The upload was cut short. Try again."}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        upload_id, workspace = hosted.new_workspace()
+        try:
+            files, size = hosted.extract_zip(data, hosted.code_dir(workspace))
+        except hosted.UploadError as exc:
+            hosted.delete_workspace(workspace)
+            self._send_json({"error": str(exc)}, status=exc.status)
+            return
+        except Exception as exc:
+            hosted.delete_workspace(workspace)
+            log.error("Upload extraction failed: %s", exc, exc_info=True)
+            self._send_json({"error": "The zip could not be unpacked."}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        label = hosted.clean_label(self.headers.get("X-Upload-Name"))
+        hosted.write_label(workspace, label)
+        self._send_json({"upload_id": upload_id, "label": label, "files": files, "bytes": size})
 
     # ------------------------------------------------------------------ scan entry point
     def _handle_scan(self, params: dict, stream: bool) -> None:
@@ -422,7 +482,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------ hosted scans
     def _hosted_source(self, p: dict):
         """Resolve the code to scan from an upload id or Git URL.
-        Returns (target, label, cleanup) or None after sending an error response."""
+        Returns (target, label, cleanup, prepare) or None after sending an error response.
+        `prepare` (Git only) clones into target inside the time-limited scan worker."""
         if p["upload_id"]:
             workspace = hosted.get_workspace(p["upload_id"])
             if workspace is None:
@@ -431,7 +492,21 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.NOT_FOUND,
                 )
                 return None
-            return hosted.code_dir(workspace), hosted.read_label(workspace), None
+            return hosted.code_dir(workspace), hosted.read_label(workspace), None, None
+        if p["git_url"]:
+            try:
+                url = hosted.validate_git_url(p["git_url"])
+            except hosted.GitError as exc:
+                self._send_json({"error": str(exc)}, status=exc.status)
+                return None
+            _, workspace = hosted.new_workspace()
+            target = hosted.code_dir(workspace)
+            return (
+                target,
+                hosted.repo_label(url),
+                lambda: hosted.delete_workspace(workspace),
+                lambda: hosted.clone_repo(url, target),
+            )
         self._send_json(
             {"error": "Provide an uploaded folder or a Git URL to scan."},
             status=HTTPStatus.BAD_REQUEST,
@@ -457,7 +532,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         source = self._hosted_source(p)
         if source is None:
             return
-        target, label, cleanup = source
+        target, label, cleanup, prepare = source
 
         if not hosted.slots().try_acquire():
             if cleanup:
@@ -474,11 +549,11 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                 cleanup()
 
         if stream:
-            self._hosted_stream(target, label, p, on_finish)
+            self._hosted_stream(target, label, p, on_finish, prepare)
         else:
-            self._hosted_sync(target, label, p, on_finish)
+            self._hosted_sync(target, label, p, on_finish, prepare)
 
-    def _hosted_run(self, target: Path, label: str, p: dict, on_finish, sse=None):
+    def _hosted_run(self, target: Path, label: str, p: dict, on_finish, sse=None, prepare=None):
         """Run one hosted scan in a worker thread with a time limit; returns the sanitised ScanResult."""
         from main import run
 
@@ -505,6 +580,9 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                 root_logger.addHandler(handler)
                 root_logger.setLevel(min(prev_level or logging.WARNING, logging.INFO))
             try:
+                if prepare:
+                    on_progress("Cloning repository", 3)
+                    prepare()
                 result, _, _ = run(
                     path=target,
                     static_only=p["static_only"],
@@ -524,10 +602,10 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         hosted.sanitize_result(result, target, label)
         return result
 
-    def _hosted_stream(self, target: Path, label: str, p: dict, on_finish) -> None:
+    def _hosted_stream(self, target: Path, label: str, p: dict, on_finish, prepare=None) -> None:
         sse = self._open_sse()
         try:
-            result = self._hosted_run(target, label, p, on_finish, sse=sse)
+            result = self._hosted_run(target, label, p, on_finish, sse=sse, prepare=prepare)
             sse("progress", {"phase": "Complete", "file": "", "pct": 100, "found": len(result.findings)})
             sse("complete", json.loads(result.model_dump_json()))
         except hosted.ScanTimeout as exc:
@@ -536,12 +614,14 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             log.error("Hosted scan error: %s", exc, exc_info=True)
             sse("error", {"error": hosted.sanitize_text(str(exc), target, label)})
 
-    def _hosted_sync(self, target: Path, label: str, p: dict, on_finish) -> None:
+    def _hosted_sync(self, target: Path, label: str, p: dict, on_finish, prepare=None) -> None:
         try:
-            result = self._hosted_run(target, label, p, on_finish)
+            result = self._hosted_run(target, label, p, on_finish, prepare=prepare)
             self._send_json(json.loads(result.model_dump_json()))
         except hosted.ScanTimeout as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.GATEWAY_TIMEOUT)
+        except hosted.GitError as exc:
+            self._send_json({"error": str(exc)}, status=exc.status)
         except Exception as exc:
             log.error("Hosted scan error: %s", exc, exc_info=True)
             self._send_json(
@@ -583,7 +663,9 @@ def run_server(port: int = 8000) -> None:
     if is_hosted:
         # Render (and most hosts) tell the app which port to use via $PORT and need all interfaces.
         port = int(os.environ.get("PORT") or port)
-        server_address = ("0.0.0.0", port)  # noqa: S104 - intended in hosted mode, token-protected
+        # All interfaces by default (required on Render); AEGISSCAN_HOST narrows it, e.g. for local testing.
+        bind_host = os.environ.get("AEGISSCAN_HOST") or "0.0.0.0"  # noqa: S104 - token-protected
+        server_address = (bind_host, port)
         server_class = _ExclusiveThreadingHTTPServer
     else:
         server_address = ("127.0.0.1", port)

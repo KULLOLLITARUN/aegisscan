@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -74,6 +75,40 @@ def _infer_category(rule_id: str) -> str:
     return "best_practices"
 
 
+def _semgrep_timeout() -> int:
+    """Seconds Semgrep may run. Shorter in hosted mode so a slow Semgrep cannot use up the whole scan limit."""
+    try:
+        return max(10, int(os.environ["AEGISSCAN_SEMGREP_TIMEOUT_S"]))
+    except (KeyError, ValueError):
+        return 150 if os.environ.get("AEGISSCAN_MODE", "").strip().lower() == "hosted" else 300
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Stop Semgrep and the semgrep-core workers it started (killing only the parent leaves them running)."""
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, timeout=15)
+        else:
+            proc.kill()
+    except Exception:  # noqa: BLE001 - best effort
+        pass
+    try:
+        proc.kill()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _run_bounded(cmd: list[str], timeout_s: int) -> subprocess.CompletedProcess:
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        out, err = proc.communicate(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc)
+        proc.communicate()
+        raise
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
 def run_semgrep(target: Path) -> list[Finding]:
     """
     Run Semgrep on *target* and return normalized Findings.
@@ -99,14 +134,13 @@ def run_semgrep(target: Path) -> list[Finding]:
         str(target),
     ]
 
+    timeout_s = _semgrep_timeout()
     try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        proc = _run_bounded(cmd, timeout_s)
+    except subprocess.TimeoutExpired:
+        log.warning("Semgrep stopped after %d s; continuing with the other tools' results", timeout_s)
+        return []
+    except (FileNotFoundError, OSError) as exc:
         log.warning("Semgrep subprocess failed: %s", exc)
         return []
 

@@ -236,12 +236,31 @@ _SEMGREP_JSON = {
 def _patch_semgrep(monkeypatch, stdout: str = "", exc: Exception | None = None):
     monkeypatch.setattr(semgrep_runner, "_find_tool", lambda name: "semgrep")
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, timeout_s=None, **kwargs):
         if exc:
             raise exc
         return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
 
-    monkeypatch.setattr(semgrep_runner.subprocess, "run", fake_run)
+    monkeypatch.setattr(semgrep_runner, "_run_bounded", fake_run)
+
+
+def test_semgrep_timeout_is_shorter_in_hosted_mode(monkeypatch) -> None:
+    monkeypatch.delenv("AEGISSCAN_SEMGREP_TIMEOUT_S", raising=False)
+    monkeypatch.delenv("AEGISSCAN_MODE", raising=False)
+    assert semgrep_runner._semgrep_timeout() == 300
+    monkeypatch.setenv("AEGISSCAN_MODE", "hosted")
+    assert semgrep_runner._semgrep_timeout() == 150
+    monkeypatch.setenv("AEGISSCAN_SEMGREP_TIMEOUT_S", "40")
+    assert semgrep_runner._semgrep_timeout() == 40
+
+
+def test_run_bounded_stops_a_process_that_runs_too_long() -> None:
+    import sys
+    import time
+    t0 = time.time()
+    with pytest.raises(subprocess.TimeoutExpired):
+        semgrep_runner._run_bounded([sys.executable, "-c", "import time; time.sleep(60)"], 1)
+    assert time.time() - t0 < 15
 
 
 def test_semgrep_missing_binary_returns_empty(monkeypatch, tmp_path: Path) -> None:

@@ -50,7 +50,7 @@ select.ag-input { padding-right: var(--space-md); }
 .ag-app { position: relative; display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--inspector-w); grid-template-rows: var(--cmd-h) minmax(0, 1fr); height: 100dvh; min-height: 680px; background: var(--paper); }
 .ag-cmd { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-md); padding: 0 var(--space-md) 0 0; background: var(--paper-2); border-bottom: var(--rule-hair) solid var(--line); z-index: var(--z-cmd); position: relative; }
 .ag-brand { width: var(--rail-w); height: 100%; display: flex; align-items: center; justify-content: center; border-right: var(--rule-hair) solid var(--line); text-decoration: none; flex: none; }
-.ag-brand-mark { width: 24px; height: 24px; background: var(--accent); clip-path: polygon(50% 0, 100% 22%, 100% 62%, 50% 100%, 0 62%, 0 22%); }
+.ag-brand-mark { width: 30px; height: 30px; color: var(--accent); }
 .ag-name { font-weight: 600; letter-spacing: -0.02em; font-size: var(--text-lg); margin-right: var(--space-xs); white-space: nowrap; }
 .ag-cmd .ag-path { flex: 1 1 200px; min-width: 120px; max-width: 460px; font-family: var(--font-outlier); }
 .ag-cmd-end { margin-left: auto; display: flex; align-items: center; gap: var(--space-sm); }

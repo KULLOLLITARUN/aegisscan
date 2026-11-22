@@ -77,7 +77,14 @@ export default function CommandBar() {
   return (
     <header className="ag-cmd">
       <Link className="ag-brand" to="/dashboard" aria-label="AegisScan, scan view">
-        <span className="ag-brand-mark" aria-hidden="true" />
+        <svg className="ag-brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <g fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round">
+            <path d="M32 4 L55 12 V32 C55 46 45 55 32 60 C19 55 9 46 9 32 V12 Z" fill="currentColor" fillOpacity=".15" />
+            <path d="M32 38 L46 44 L32 51 L18 44 Z" fill="currentColor" />
+            <path d="M32 38 V20" />
+            <path d="M32 12 L37 17 L32 22 L27 17 Z" fill="currentColor" />
+          </g>
+        </svg>
       </Link>
       <span className="ag-name">AegisScan</span>
       {hosted ? (

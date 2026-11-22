@@ -1,3 +1,5 @@
+<p align="center"><img src="ui/public/logo-512.png" width="96" alt="AegisScan logo"></p>
+
 # AegisScan — AI-Driven Workspace Security & Optimization Scanner
 
 > **AegisScan** is a hybrid multi-layered security pipeline combining deterministic static analysis (Bandit, Semgrep, GitLeaks) with structured LLM AI reasoning (Groq) to analyze codebases for security vulnerabilities, secrets, and performance anti-patterns.

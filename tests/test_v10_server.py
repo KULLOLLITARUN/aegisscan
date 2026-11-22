@@ -146,6 +146,33 @@ def test_scan_rejects_path_outside_allowed_roots(tmp_path: Path, monkeypatch) ->
     handler.send_response.assert_called_with(403)
 
 
+def test_allow_any_path_opt_in_permits_outside_paths(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("AEGISSCAN_ALLOWED_ROOTS", raising=False)
+    monkeypatch.setenv("AEGISSCAN_ALLOW_ANY_PATH", "1")
+    handler = _create_mock_request_handler(
+        "POST", "/api/scan", body={"path": str(tmp_path), "static_only": True}
+    )
+    handler.do_POST()
+    handler.send_response.assert_called_with(200)
+
+
+@pytest.mark.parametrize("value", ["", "0", "false", "no"])
+def test_allow_any_path_off_values_keep_restriction(tmp_path: Path, monkeypatch, value: str) -> None:
+    monkeypatch.delenv("AEGISSCAN_ALLOWED_ROOTS", raising=False)
+    monkeypatch.setenv("AEGISSCAN_ALLOW_ANY_PATH", value)
+    handler = _create_mock_request_handler("POST", "/api/scan", body={"path": str(tmp_path)})
+    handler.do_POST()
+    handler.send_response.assert_called_with(403)
+
+
+def test_allow_any_path_does_not_bypass_origin_check(monkeypatch) -> None:
+    monkeypatch.setenv("AEGISSCAN_ALLOW_ANY_PATH", "1")
+    handler = _create_mock_request_handler("POST", "/api/scan", body={"path": "."})
+    handler.headers = {"Origin": "https://evil.example"}
+    handler.do_POST()
+    handler.send_response.assert_called_with(403)
+
+
 def test_scan_rejects_parent_traversal(monkeypatch) -> None:
     monkeypatch.delenv("AEGISSCAN_ALLOWED_ROOTS", raising=False)
     handler = _create_mock_request_handler("POST", "/api/scan", body={"path": "../../.."})

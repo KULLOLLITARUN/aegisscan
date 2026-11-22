@@ -57,17 +57,27 @@ def _allowed_roots() -> list[Path]:
     return roots
 
 
+def _allow_any_path() -> bool:
+    """Opt-in escape hatch: AEGISSCAN_ALLOW_ANY_PATH=1 lets the server scan any directory.
+    Off by default. The Host/Origin checks still apply. Read per request."""
+    return os.environ.get("AEGISSCAN_ALLOW_ANY_PATH", "").strip().lower() in ("1", "true", "yes")
+
+
 def _resolve_scan_path(raw_path: str) -> Path:
     """Resolve a user-supplied scan path; raise PermissionError if it lies outside
-    every allowed root (blocks scanning arbitrary directories via the API)."""
+    every allowed root (blocks scanning arbitrary directories via the API), unless
+    AEGISSCAN_ALLOW_ANY_PATH is set."""
     candidate = Path(raw_path)
     target = (candidate if candidate.is_absolute() else _PROJECT_ROOT / candidate).resolve()
+    if _allow_any_path():
+        return target
     for root in _allowed_roots():
         if target == root or root in target.parents:
             return target
     raise PermissionError(
         f"Path is outside the allowed scan roots: {target}. "
-        "Set AEGISSCAN_ALLOWED_ROOTS to permit additional directories."
+        "Set AEGISSCAN_ALLOWED_ROOTS to permit additional directories, "
+        "or AEGISSCAN_ALLOW_ANY_PATH=1 to permit any directory."
     )
 
 
@@ -330,6 +340,8 @@ def run_server(port: int = 8000) -> None:
     print("  AEGISSCAN COMMAND CENTER")
     print(f"  -> http://localhost:{port}")
     print("  Press Ctrl+C to stop.")
+    if _allow_any_path():
+        print("\n  WARNING: AEGISSCAN_ALLOW_ANY_PATH is set - the server will scan ANY directory.")
     hint = _ui_build_hint()
     if hint:
         print(f"\n  NOTE: {hint}")

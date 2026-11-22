@@ -14,6 +14,8 @@ import json
 import logging
 import mimetypes
 import os
+import socket
+import sys
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -332,10 +334,35 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
+class _ExclusiveHTTPServer(HTTPServer):
+    """HTTPServer that never shares a port with another process.
+
+    On Windows, SO_REUSEADDR (which HTTPServer enables) lets a second server bind a port that is
+    already in use, so an old server keeps answering requests while a newly started one looks
+    healthy. Use SO_EXCLUSIVEADDRUSE there so a busy port fails loudly instead.
+    """
+
+    allow_reuse_address = os.name != "nt"
+
+    def server_bind(self) -> None:
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def run_server(port: int = 8000) -> None:
     """Launch the AegisScan production web server."""
     server_address = ("127.0.0.1", port)
-    httpd = HTTPServer(server_address, AegisScanRequestHandler)
+    try:
+        httpd = _ExclusiveHTTPServer(server_address, AegisScanRequestHandler)
+    except OSError as exc:
+        print(
+            f"\nERROR: could not start on port {port}: {exc}\n"
+            "  Another AegisScan (or other program) is probably already using it.\n"
+            "  Stop that process, or choose another port with --port.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     print(f"\n{'='*62}")
     print("  AEGISSCAN COMMAND CENTER")
     print(f"  -> http://localhost:{port}")

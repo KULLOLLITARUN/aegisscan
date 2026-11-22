@@ -107,7 +107,7 @@ def test_run_server_prints_build_hint_when_ui_missing(tmp_path: Path, monkeypatc
         def server_close(self) -> None:
             pass
 
-    monkeypatch.setattr(app, "HTTPServer", _StubServer)
+    monkeypatch.setattr(app, "_ExclusiveHTTPServer", _StubServer)
     _use_dist(monkeypatch, tmp_path / "missing-dist")
     app.run_server(port=0)
     assert "npm run build" in capsys.readouterr().out
@@ -171,6 +171,24 @@ def test_allow_any_path_does_not_bypass_origin_check(monkeypatch) -> None:
     handler.headers = {"Origin": "https://evil.example"}
     handler.do_POST()
     handler.send_response.assert_called_with(403)
+
+
+def test_server_refuses_to_share_a_busy_port(capsys) -> None:
+    """A second server must fail on a busy port (Windows SO_REUSEADDR would otherwise let it
+    bind silently while the old server keeps answering)."""
+    from scanner.server.app import _ExclusiveHTTPServer, run_server
+
+    first = _ExclusiveHTTPServer(("127.0.0.1", 0), AegisScanRequestHandler)
+    try:
+        port = first.server_address[1]
+        with pytest.raises(OSError):
+            _ExclusiveHTTPServer(("127.0.0.1", port), AegisScanRequestHandler)
+        with pytest.raises(SystemExit) as exc:
+            run_server(port=port)
+        assert exc.value.code == 1
+        assert "could not start on port" in capsys.readouterr().err
+    finally:
+        first.server_close()
 
 
 def test_scan_rejects_parent_traversal(monkeypatch) -> None:

@@ -131,6 +131,11 @@ def run_semgrep(target: Path) -> list[Finding]:
         "--json",
         "--quiet",
         "--no-git-ignore",        # respect our own ignore list, not semgrep's
+        # Without a project root, Semgrep treats a folder that is not a Git repo as "somewhere inside
+        # your disk" and walks up and around the user's profile folders (minutes of wasted time).
+        # Pinning the root to the scanned folder keeps it there and also avoids creating any files.
+        *(["--project-root", str(target)] if Path(target).is_dir() else []),
+        "--metrics=off",
         str(target),
     ]
 

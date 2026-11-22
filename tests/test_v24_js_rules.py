@@ -48,7 +48,7 @@ def scan(tmp_path_factory) -> dict[str, list[str]]:
     (root / "cases.js").write_text("\n".join(lines) + "\n", encoding="utf-8")
     proc = subprocess.run(
         [_SEMGREP, "scan", "--config", str(_LOCAL_RULES), "--metrics=off", "--json", "--quiet",
-         "--no-git-ignore", str(root)],
+         "--no-git-ignore", "--project-root", str(root), str(root)],
         capture_output=True, text=True, timeout=600,
     )
     findings = [_normalize(r) for r in json.loads(proc.stdout)["results"]]

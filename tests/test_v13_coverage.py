@@ -422,3 +422,20 @@ def test_semgrep_configs_avoid_known_dead_packs() -> None:
     # zeroed every Semgrep result in the benchmark.
     assert "p/owasp-top-10" not in semgrep_runner._SEMGREP_CONFIGS
     assert "p/owasp-top-ten" in semgrep_runner._SEMGREP_CONFIGS
+
+
+def test_semgrep_is_pinned_to_the_scanned_folder(monkeypatch, tmp_path: Path) -> None:
+    """Without --project-root Semgrep wanders through the user's profile for minutes on non-git folders."""
+    seen = {}
+    monkeypatch.setattr(semgrep_runner, "_find_tool", lambda name: "semgrep")
+
+    def fake_run(cmd, timeout_s=None, **kwargs):
+        seen["cmd"] = list(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(semgrep_runner, "_run_bounded", fake_run)
+    semgrep_runner.run_semgrep(tmp_path)
+    cmd = seen["cmd"]
+    assert cmd[cmd.index("--project-root") + 1] == str(tmp_path)
+    assert "--metrics=off" in cmd
+    assert cmd[-1] == str(tmp_path)

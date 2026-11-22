@@ -106,7 +106,23 @@ aegisscan --server --port 8000
 
 Without the build the server still starts and serves a basic fallback page, and prints a reminder. Requires Node 22+ (Vite 8). For frontend work run `npm run dev` (port 5173, proxies `/api` to `127.0.0.1:8000`). CI lints and builds the UI on every push and uploads it as the `aegisscan-ui-dist` artifact.
 
-> **Windows:** `npm run ...` fails if the project path contains `&` (for example `Security_&_Optimization`) because `cmd.exe` splits on it. Use a path without `&`, or call the tools directly: `node node_modules/vite/bin/vite.js build`.
+> **Windows:** `npm run ...` fails if the project path contains `&` (for example `Security_&_Optimization`) because `cmd.exe` splits on it. Use a path without `&`, or call the tools directly: `node node_modules/vite/bin/vite.js build` and `node node_modules/oxlint/bin/oxlint src`.
+
+### The survey console
+
+The dashboard is a single "survey console" (design source: `Plans/ui_redesign_v3.html`) with Day (pale spruce glass) and Night (deep spruce) themes. The choice is remembered in the browser and defaults to your system setting.
+
+- **Command bar:** target path, Deep, Static only, privacy level, Run scan, and the theme switch. Patch generation and the Groq API key sit under **More**.
+- **Left rail:** Scan, Findings, Files, History and Logs. The Findings badge counts critical and high findings.
+- **Scan canvas:** a CSS 3D floor plan with one tile per file that has findings and one pin per finding. Pin height is confidence. Severity is shown by colour **and** shape: critical is a diamond, high a square, medium a triangle, low a hollow square. Drag or use the arrow keys to turn it, scroll or `+`/`-` to zoom. Selecting a finding moves the camera to its tile.
+- **Verdict block:** security score, a one-sentence verdict, the change since the previous scan of the same target (from `/api/history`), and the optimization score.
+- **Timeline:** follows the live scan, then replays it at 4x. Drag the track or use the arrow keys, `Home`, `End` and `Space` to scrub. Segments and markers come from the progress and log events the stream reported. Under `prefers-reduced-motion` the replay does not auto-play.
+- **Inspector:** *Findings* (search, severity chips, sort), *Evidence* (syntax colouring, suggested fix or patch, Copy patch) and *Activity* (the live SSE log).
+- **Findings, Files and Logs pages:** the full finding table with filters and paging, a per-file view, and the complete log. Clicking a finding opens the same evidence view in a dialog. History lists past scans from the SQLite database.
+
+Every region has loading, empty and error states. All numbers come from the scan result or `/api/history`; nothing is estimated.
+
+**Known limits.** The API returns the findings but not the full file list, so the floor shows only files that have findings, sized by the highest line a finding reaches. Other analysed files appear as a count. The canvas draws at most the 48 most severe findings and notes how many more are in the queue. The server does not store full scan results or phase timings: after a page reload the canvas is empty until you run a scan, and the timeline is only recorded for scans run in the current browser session.
 
 ---
 

@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AegisScan dashboard redesign</title>
+<meta name="description" content="Design mockup of the AegisScan scan dashboard: scores, pipeline timeline, findings ledger and evidence pane.">
+<script>try{var t=localStorage.getItem("aegis-theme")||(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}</script>
+<link href="https://api.fontshare.com/v2/css?f[]=switzer@400,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: Rim (deal 2/3, seed security-scanner-dashboard-app-f84c·fa352832·2026-11-22·r0)
+ * nav: top bar, five tabs · signature: the findings ledger with its evidence pane · states: loading, empty, error, full
+ * axes: dark/grotesk-sans/warm · posture: committed · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V4 · weakest: S, the severity colours are the only hues beyond the two signals, kept to a 3px bar and one square each */
+
+:root {
+  color-scheme: dark;
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px;
+  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem; --text-3xl: 2.074rem;
+  --text-display: 3.6rem; --text-section: 1.2rem; --text-title: 1rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms; --dur-short: 220ms;
+  --color-error: oklch(72% 0.15 27); --color-success: oklch(76% 0.13 150);
+  --container: 1440px; --gutter: 40px;
+  --z-sticky-nav: 300;
+  --color-paper: oklch(9% 0.008 75); --color-paper-2: oklch(12.5% 0.009 75); --color-paper-3: oklch(6.5% 0.007 75);
+  --color-ink: oklch(94% 0.010 80); --color-ink-2: oklch(84% 0.011 80); --color-muted: oklch(68% 0.012 80); --color-muted-2: oklch(50% 0.010 80);
+  --color-rule: oklch(25% 0.010 78); --color-rule-2: oklch(16% 0.009 78);
+  --color-accent: oklch(72% 0.17 45); --color-accent-hover: oklch(77% 0.17 45); --color-accent-press: oklch(66% 0.17 45); --color-accent-ink: oklch(10% 0.02 45); --color-accent-2: oklch(74% 0.12 250); --color-focus: oklch(78% 0.15 45);
+  --font-display: "Switzer", ui-sans-serif, system-ui, sans-serif; --font-body: var(--font-display);
+  --font-outlier: "Geist Mono", ui-monospace, monospace;
+  --radius-card: 0; --rule-hair: 1px;
+  --tracking-display: -0.04em; --display-weight: 500;
+  /* severity: reserved for severity, never reused */
+  --sev-critical: var(--color-error);
+  --sev-high: var(--color-accent);
+  --sev-medium: oklch(80% 0.13 90);
+  --sev-low: var(--color-success);
+  --sev-info: var(--color-accent-2);
+}
+
+/* light colourway: warm paper, same signals darkened for contrast */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-paper: oklch(96.5% 0.007 80); --color-paper-2: oklch(99.4% 0.003 80); --color-paper-3: oklch(93.5% 0.009 80);
+  --color-ink: oklch(19% 0.012 80); --color-ink-2: oklch(31% 0.012 80); --color-muted: oklch(46% 0.012 80); --color-muted-2: oklch(64% 0.010 80);
+  --color-rule: oklch(86% 0.009 80); --color-rule-2: oklch(91.5% 0.007 80);
+  --color-accent: oklch(53% 0.17 45); --color-accent-hover: oklch(48% 0.16 45); --color-accent-press: oklch(43% 0.15 45);
+  --color-accent-ink: oklch(99% 0.004 45); --color-accent-2: oklch(53% 0.14 250); --color-focus: oklch(55% 0.18 45);
+  --color-error: oklch(54% 0.20 27); --color-success: oklch(52% 0.14 150);
+  --sev-medium: oklch(60% 0.14 80);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { scrollbar-color: var(--color-muted) var(--color-paper); }
+body { margin: 0; background: var(--color-paper); color: var(--color-ink); font-family: var(--font-body); font-size: var(--text-md); line-height: 1.5; -webkit-font-smoothing: antialiased; caret-color: var(--color-accent); }
+::selection { background: color-mix(in oklab, var(--color-accent) 35%, transparent); color: var(--color-ink); }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+h1, h2, h3, p { margin: 0; text-wrap: balance; }
+h1, h2, h3 { font-weight: var(--display-weight); letter-spacing: -0.03em; line-height: 1.1; overflow-wrap: break-word; min-width: 0; }
+h2 { font-size: var(--text-section); } h3 { font-size: var(--text-title); }
+button, input, select { font: inherit; color: inherit; }
+.container { width: 100%; max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+.mono, .num { font-family: var(--font-outlier); font-variant-numeric: tabular-nums; }
+.muted { color: var(--color-muted); }
+.small { font-size: var(--text-sm); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* controls: 36px, one recipe */
+.btn { display: inline-flex; align-items: center; gap: var(--space-xs); min-height: 36px; padding: 0 var(--space-md); border: var(--rule-hair) solid var(--color-rule); background: none; color: var(--color-ink); font-weight: 500; font-size: var(--text-sm); cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out); }
+.btn:hover { border-color: var(--color-muted); background: var(--color-paper-2); }
+.btn:active { background: var(--color-paper-3); }
+.btn[disabled] { color: var(--color-muted-2); border-color: var(--color-rule-2); cursor: not-allowed; background: none; }
+.btn--primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
+.btn--primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+.btn--primary:active { background: var(--color-accent-press); }
+.btn--ghost { border-color: transparent; color: var(--color-muted); }
+.input { min-height: 36px; padding: 0 var(--space-sm); background: var(--color-paper); border: var(--rule-hair) solid var(--color-muted-2); color: var(--color-ink); font-size: var(--text-sm); transition: border-color var(--dur-micro) var(--ease-out); }
+.input:hover { border-color: var(--color-muted); }
+.input::placeholder { color: var(--color-muted-2); }
+.input.mono { font-size: var(--text-sm); }
+select.input { padding-right: var(--space-lg); }
+.chip { min-height: 32px; padding: 0 var(--space-sm); border: var(--rule-hair) solid var(--color-rule); background: none; font-size: var(--text-sm); color: var(--color-muted); cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out); }
+.chip:hover { color: var(--color-ink); border-color: var(--color-muted-2); }
+.chip[aria-pressed="true"] { color: var(--color-ink); border-color: var(--color-accent); background: color-mix(in oklab, var(--color-accent) 12%, transparent); }
+.chip .num { margin-left: var(--space-2xs); color: var(--color-muted); }
+
+/* shell: top bar, five destinations */
+.topbar { position: sticky; top: 0; z-index: var(--z-sticky-nav); background: var(--color-paper-3); border-bottom: var(--rule-hair) solid var(--color-rule); }
+.topbar .container { display: flex; align-items: center; gap: var(--space-xl); min-height: 56px; }
+.brand { display: flex; align-items: center; gap: var(--space-sm); font-weight: 500; letter-spacing: -0.03em; font-size: var(--text-lg); text-decoration: none; }
+.brand-mark { width: 20px; height: 20px; border: 2px solid var(--color-accent); position: relative; }
+.brand-mark::after { content: ""; position: absolute; inset: 4px; background: var(--color-accent); }
+.nav { display: flex; gap: var(--space-2xs); align-self: stretch; }
+.nav a { display: flex; align-items: center; padding: 0 var(--space-md); color: var(--color-muted); text-decoration: none; font-size: var(--text-sm); font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out); }
+.nav a:hover { color: var(--color-ink); }
+.nav a[aria-current="page"] { color: var(--color-ink); border-bottom-color: var(--color-accent); }
+.nav .count { margin-left: var(--space-xs); padding: 0 var(--space-xs); background: var(--color-accent); color: var(--color-accent-ink); font-size: var(--text-xs); font-family: var(--font-outlier); line-height: 18px; }
+.nav .live { margin-left: var(--space-xs); color: var(--color-accent-2); font-size: var(--text-xs); }
+.topbar-end { margin-left: auto; display: flex; align-items: center; gap: var(--space-md); }
+.clock { font-size: var(--text-sm); color: var(--color-muted); }
+
+/* scan bar */
+.scanbar { border-bottom: var(--rule-hair) solid var(--color-rule); background: var(--color-paper); }
+.scanbar .container { display: flex; align-items: center; gap: var(--space-sm); padding-block: var(--space-md); flex-wrap: wrap; }
+.scanbar .path { flex: 1 1 320px; min-width: 0; }
+.field { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--text-sm); color: var(--color-muted); }
+.check { display: inline-flex; align-items: center; gap: var(--space-xs); min-height: 36px; padding: 0 var(--space-sm); border: var(--rule-hair) solid var(--color-rule); font-size: var(--text-sm); color: var(--color-ink-2); cursor: pointer; }
+.check input { accent-color: var(--color-accent); width: 14px; height: 14px; margin: 0; }
+.check:hover { border-color: var(--color-muted-2); }
+
+main { padding-block: var(--space-xl) var(--space-2xl); }
+.grid { display: grid; gap: var(--space-lg); }
+.row-1 { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); }
+.row-1 > .well { display: flex; flex-direction: column; }
+.row-1 > .well > .note { margin-top: auto; }
+.row-3 { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); margin-top: var(--space-lg); align-items: start; }
+.row-2 { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); margin-top: var(--space-lg); align-items: start; }
+
+/* wells: lightness for depth, corner ticks, no shadow */
+.well { position: relative; background: var(--color-paper-2); border: var(--rule-hair) solid var(--color-rule-2); }
+.well-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: var(--rule-hair) solid var(--color-rule); }
+.well-body { padding: var(--space-lg); }
+.ticks::before, .ticks::after { content: ""; position: absolute; width: 12px; height: 12px; border: 0 solid var(--color-muted); pointer-events: none; }
+.ticks::before { top: -8px; left: -8px; border-width: 1px 0 0 1px; }
+.ticks::after { right: -8px; bottom: -8px; border-width: 0 1px 1px 0; }
+
+/* scores */
+.scores { display: grid; grid-template-columns: 1fr 1fr; }
+.score { padding: var(--space-lg); }
+.score + .score { border-left: var(--rule-hair) solid var(--color-rule); }
+.score .label { font-size: var(--text-sm); color: var(--color-muted); }
+.score .big { font-family: var(--font-outlier); font-variant-numeric: tabular-nums; font-size: var(--text-display); letter-spacing: -0.04em; line-height: 1; margin-top: var(--space-sm); }
+.score .big small { white-space: nowrap; font-size: var(--text-sm); color: var(--color-muted); letter-spacing: 0; margin-left: var(--space-xs); }
+.score .verdict { margin-top: var(--space-sm); font-size: var(--text-sm); color: var(--color-ink-2); }
+.scale { margin-top: var(--space-md); height: 3px; background: var(--color-rule); position: relative; }
+.scale i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--color-accent); transform-origin: left; }
+.note { padding: var(--space-sm) var(--space-lg); border-top: var(--rule-hair) solid var(--color-rule); font-size: var(--text-xs); color: var(--color-muted); }
+
+/* severity bar: one hairline-parted strip, counts as table */
+.sevbar { display: flex; height: 10px; gap: var(--space-3xs); margin-bottom: var(--space-md); }
+.sevbar span { min-width: 3px; }
+.sevlist { display: grid; grid-template-columns: repeat(5, 1fr); border-top: var(--rule-hair) solid var(--color-rule); }
+.sevlist div { padding: var(--space-sm) var(--space-xs) 0 0; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.sevlist b { display: block; font-family: var(--font-outlier); font-weight: 400; font-size: var(--text-xl); color: var(--color-ink); letter-spacing: -0.03em; }
+.sq { display: inline-block; width: 8px; height: 8px; margin-right: var(--space-xs); background: currentColor; flex: none; }
+
+/* pipeline: a diagram of real time, UTC axis */
+.axis { position: relative; margin: 0; padding: 0; list-style: none; }
+.phase { display: grid; grid-template-columns: 150px minmax(0, 1fr) 70px; align-items: center; gap: var(--space-md); min-height: 34px; border-bottom: var(--rule-hair) solid var(--color-rule-2); font-size: var(--text-sm); }
+.phase:last-child { border-bottom: 0; }
+.phase .track { position: relative; height: 10px; background: repeating-linear-gradient(90deg, var(--color-rule-2) 0 1px, transparent 1px 10%); }
+.phase .bar { position: absolute; top: 0; bottom: 0; background: var(--color-accent-2); }
+.phase.active .bar { background: var(--color-accent); }
+.phase .t { text-align: right; color: var(--color-muted); font-size: var(--text-xs); }
+.ticks-axis { display: grid; grid-template-columns: 150px minmax(0, 1fr) 70px; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-muted); padding-top: var(--space-xs); }
+.ticks-axis div { display: flex; justify-content: space-between; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-lg); margin-top: var(--space-md); font-size: var(--text-xs); color: var(--color-muted); }
+
+/* findings table */
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; padding: var(--space-md) var(--space-lg); border-bottom: var(--rule-hair) solid var(--color-rule); }
+.toolbar .input { flex: 1 1 180px; min-width: 0; }
+table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th { text-align: left; font-weight: 500; color: var(--color-muted); padding: var(--space-sm) var(--space-md); border-bottom: var(--rule-hair) solid var(--color-rule); white-space: nowrap; }
+th:first-child, td:first-child { padding-left: var(--space-lg); }
+th.r, td.r { text-align: right; }
+td { padding: 0 var(--space-md); height: 44px; border-bottom: var(--rule-hair) solid var(--color-rule-2); vertical-align: middle; }
+tbody tr { cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out); }
+tbody tr:hover { background: color-mix(in oklab, var(--color-ink) 3%, transparent); }
+tbody tr[aria-selected="true"] { background: var(--color-paper-3); box-shadow: inset 2px 0 0 var(--color-accent); }
+tbody tr:focus-visible { outline-offset: -2px; }
+td .issue { color: var(--color-ink); font-weight: 500; letter-spacing: -0.01em; }
+.sevcell { display: inline-flex; align-items: center; font-weight: 500; }
+.loc { color: var(--color-ink-2); font-size: var(--text-xs); }
+.src { color: var(--color-muted); }
+.tablefoot { display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) var(--space-lg); font-size: var(--text-xs); color: var(--color-muted); }
+
+/* detail pane */
+.detail .well-body { display: grid; gap: var(--space-lg); }
+.detail h3 { font-size: var(--text-xl); letter-spacing: -0.03em; max-width: 24ch; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); border-block: var(--rule-hair) solid var(--color-rule); }
+.facts div { padding: var(--space-sm) var(--space-md) var(--space-sm) 0; font-size: var(--text-xs); color: var(--color-muted); }
+.facts div + div { padding-left: var(--space-md); border-left: var(--rule-hair) solid var(--color-rule); }
+.facts b { display: block; font-weight: 400; font-family: var(--font-outlier); font-size: var(--text-lg); color: var(--color-ink); margin-top: var(--space-3xs); letter-spacing: -0.02em; }
+.sub { font-size: var(--text-sm); color: var(--color-muted); margin-bottom: var(--space-xs); }
+pre { margin: 0; padding: var(--space-md); background: var(--color-paper-3); border: var(--rule-hair) solid var(--color-rule-2); font-family: var(--font-outlier); font-size: var(--text-xs); line-height: 1.7; overflow-x: auto; color: var(--color-ink-2); }
+pre > span { display: block; }
+pre .ln { color: var(--color-muted-2); display: inline-block; width: 34px; user-select: none; }
+pre .hit { background: color-mix(in oklab, var(--color-error) 14%, transparent); display: block; margin-inline: calc(-1 * var(--space-md)); padding-inline: var(--space-md); box-shadow: inset 2px 0 0 var(--color-error); }
+pre .add { background: color-mix(in oklab, var(--color-success) 12%, transparent); display: block; margin-inline: calc(-1 * var(--space-md)); padding-inline: var(--space-md); box-shadow: inset 2px 0 0 var(--color-success); }
+.detail p { color: var(--color-ink-2); font-size: var(--text-sm); line-height: 1.6; max-width: 60ch; }
+.actions { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+
+/* log */
+.log { margin: 0; }
+.logbody { font-family: var(--font-outlier); font-size: var(--text-xs); line-height: 1.9; padding: var(--space-md) var(--space-lg); max-height: 200px; overflow: auto; background: var(--color-paper-3); }
+.logbody div { display: grid; grid-template-columns: 96px 56px 1fr; gap: var(--space-md); color: var(--color-ink-2); }
+.logbody .ts { color: var(--color-muted-2); }
+.logbody .warn { color: var(--sev-medium); }
+.logbody .ok { color: var(--color-success); }
+.logbody .info { color: var(--color-accent-2); }
+
+/* states */
+.state { padding: var(--space-2xl) var(--space-lg); display: grid; gap: var(--space-sm); justify-items: start; max-width: 52ch; }
+.state h3 { font-size: var(--text-xl); }
+.state p { color: var(--color-muted); font-size: var(--text-sm); }
+.skel { height: 44px; border-bottom: var(--rule-hair) solid var(--color-rule-2); display: grid; grid-template-columns: 90px 1fr 120px 70px; gap: var(--space-md); align-items: center; padding-inline: var(--space-lg); }
+.skel i { height: 10px; background: var(--color-rule); display: block; animation: breathe 1.6s var(--ease-out) infinite alternate; }
+@keyframes breathe { from { opacity: .35; } to { opacity: .8; } }
+.statebar { display: flex; gap: var(--space-2xs); align-items: center; font-size: var(--text-xs); color: var(--color-muted); }
+.statebar .chip { min-height: 26px; font-size: var(--text-xs); }
+
+
+/* fix-first list */
+.fixfirst { margin-top: var(--space-lg); }
+.fixfirst ol { margin: 0; padding: 0; list-style: none; border-top: var(--rule-hair) solid var(--color-rule); }
+.fixfirst li button { width: 100%; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: var(--space-sm); align-items: center; min-height: 40px; padding: 0; background: none; border: 0; border-bottom: var(--rule-hair) solid var(--color-rule-2); text-align: left; cursor: pointer; font-size: var(--text-sm); color: var(--color-ink); transition: color var(--dur-micro) var(--ease-out); }
+.fixfirst li button:hover { color: var(--color-accent); }
+.fixfirst .sq { margin: 0; }
+.fixfirst .loc { color: var(--color-muted); }
+
+
+/* theme switch */
+.seg { display: inline-flex; border: var(--rule-hair) solid var(--color-rule); }
+.seg button { min-height: 32px; padding: 0 var(--space-md); background: none; border: 0; color: var(--color-muted); font-size: var(--text-sm); font-weight: 500; cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out); }
+.seg button:hover { color: var(--color-ink); }
+.seg button[aria-pressed="true"] { background: var(--color-paper-3); color: var(--color-ink); box-shadow: inset 0 -2px 0 var(--color-accent); }
+.seg button:focus-visible { outline-offset: -2px; }
+.delta { display: block; margin-top: var(--space-2xs); font-size: var(--text-xs); color: var(--color-muted); }
+.delta.worse { color: var(--color-error); } .delta.better { color: var(--color-success); }
+.scale i { width: 100%; transform: scaleX(var(--v, 0)); animation: fill 900ms var(--ease-out) backwards; }
+@keyframes fill { from { transform: scaleX(0); } }
+
+/* slab base under each tile, ground marker under each pin */
+.tile { transform-style: preserve-3d; }
+.tile::before { content: ""; position: absolute; inset: 0; background: var(--color-rule); transform: translateZ(-8px); }
+.mark { width: 16px; height: 16px; margin: calc(var(--space-xs) * -1) 0 0 calc(var(--space-xs) * -1); border: var(--rule-hair) solid var(--sev); background: color-mix(in oklab, var(--sev) 25%, transparent); }
+.tile span { z-index: 1; }
+
+/* 3D scan volume */
+.volume { display: flex; flex-direction: column; }
+.vol-ctl { display: flex; gap: var(--space-xs); }
+.stage { position: relative; flex: 1; min-height: 440px; background:
+    repeating-linear-gradient(0deg, var(--color-rule-2) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(90deg, var(--color-rule-2) 0 1px, transparent 1px 32px),
+    var(--color-paper-3);
+  perspective: 1500px; overflow: hidden; cursor: grab; touch-action: pan-y; }
+.stage:active { cursor: grabbing; }
+.scene { position: absolute; left: 50%; top: 52%; width: 560px; height: 270px; margin: -136px 0 0 -280px; transform-style: preserve-3d; --rot: -32deg; }
+.scene > * { position: absolute; }
+.pin > * { position: absolute; display: block; }
+.floor-base { left: -40px; top: -40px; width: 640px; height: 350px; border: var(--rule-hair) solid var(--color-rule); background: repeating-linear-gradient(0deg, var(--color-rule-2) 0 1px, transparent 1px 30px), repeating-linear-gradient(90deg, var(--color-rule-2) 0 1px, transparent 1px 30px), var(--color-paper); }
+.tile { background: var(--color-paper-2); border: var(--rule-hair) solid var(--color-rule); }
+.tile.hit { border-color: color-mix(in oklab, var(--sev) 65%, var(--color-rule)); background: color-mix(in oklab, var(--sev) 7%, var(--color-paper-2)); }
+.tile span { position: absolute; left: var(--space-xs); bottom: var(--space-2xs); font-family: var(--font-outlier); font-size: var(--text-xs); color: var(--color-muted); }
+.wall { left: 0; top: -120px; width: 270px; height: 120px; transform-origin: 0 100%; border-top: var(--rule-hair) solid var(--color-accent); background: linear-gradient(to top, color-mix(in oklab, var(--color-accent) 22%, transparent), transparent); transform: translate3d(-10px, 0, 0) rotateZ(90deg) rotateX(-90deg); animation: sweep 10s linear infinite; pointer-events: none; }
+.scene.paused .wall, .scene.paused .stem, .scene.paused .cap { animation-play-state: paused; }
+@keyframes sweep {
+  0% { transform: translate3d(-10px, 0, 0) rotateZ(90deg) rotateX(-90deg); opacity: 0; }
+  3% { opacity: 1; }
+  60% { transform: translate3d(570px, 0, 0) rotateZ(90deg) rotateX(-90deg); opacity: 1; }
+  64%, 100% { transform: translate3d(570px, 0, 0) rotateZ(90deg) rotateX(-90deg); opacity: 0; }
+}
+.pin { left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; transform: translate3d(var(--x), var(--y), 0) rotateZ(calc(var(--rot) * -1)) rotateX(-90deg); color: var(--sev); }
+.stem { left: -1px; top: calc(var(--h) * -1); width: 2px; height: var(--h); background: currentColor; transform-origin: 50% 100%; animation: grow 10s var(--ease-out) var(--d) infinite backwards; }
+.cap { left: -6px; top: calc(var(--h) * -1 - 6px); width: 12px; height: 12px; padding: 0; background: currentColor; border: var(--rule-hair) solid var(--color-paper); cursor: pointer; animation: rise 10s var(--ease-out) var(--d) infinite backwards; transition: transform var(--dur-micro) var(--ease-out); }
+.pin.sel .cap { outline: 2px solid var(--color-ink); outline-offset: 2px; }
+.cap:hover { transform: scale(1.35); }
+.cap:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+@keyframes grow { 0% { transform: scaleY(0); } 4% { transform: scaleY(1); } 100% { transform: scaleY(1); } }
+@keyframes rise { 0% { transform: translateY(var(--h)); opacity: 0; } 4% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(0); opacity: 1; } }
+.hud { position: absolute; font-size: var(--text-xs); color: var(--color-ink-2); pointer-events: none; }
+.hud-tl { left: var(--space-lg); top: var(--space-md); } .hud-tr { right: var(--space-lg); top: var(--space-md); }
+.hud-bl { left: var(--space-lg); bottom: var(--space-md); display: flex; gap: var(--space-md); font-size: var(--text-xs); color: var(--color-muted); }
+.readout { min-height: 48px; display: flex; align-items: center; padding: var(--space-sm) var(--space-lg); border-top: var(--rule-hair) solid var(--color-rule); font-size: var(--text-xs); color: var(--color-muted); }
+.readout b { color: var(--color-ink); font-weight: 400; }
+
+@media (max-width: 75rem) { .row-1, .row-2, .row-3 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 60rem) {
+  :root { --gutter: 20px; --text-display: 3rem; }
+  .stage { min-height: 340px; }
+  .topbar .container { gap: var(--space-md); overflow-x: auto; }
+  .clock { display: none; }
+  .phase, .ticks-axis { grid-template-columns: 96px minmax(0, 1fr) 52px; }
+  .col-src, .col-cat { display: none; }
+  .sevlist { grid-template-columns: repeat(3, 1fr); }
+  .facts { grid-template-columns: 1fr 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .wall { display: none; } *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container">
+    <a class="brand" href="#"><span class="brand-mark" aria-hidden="true"></span>AegisScan</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="#" aria-current="page">Dashboard</a>
+      <a href="#">Findings<span class="count num" id="navCount">0</span></a>
+      <a href="#">Files</a>
+      <a href="#">Scans</a>
+      <a href="#">Logs<span class="live">live</span></a>
+    </nav>
+    <div class="topbar-end">
+      <div class="seg" role="group" aria-label="Colour theme">
+        <button type="button" data-theme-set="dark" aria-pressed="true">Dark</button>
+        <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+      </div>
+      <span class="clock mono" id="clock">14:32 UTC</span>
+    </div>
+  </div>
+</header>
+
+<section class="scanbar" aria-label="Start a scan">
+  <div class="container">
+    <label class="visually-hidden" for="target">Scan target</label>
+    <input id="target" class="input mono path" value="examples/vulnerable_python" spellcheck="false">
+    <label class="check"><input type="checkbox"> Deep, every chunk</label>
+    <label class="check"><input type="checkbox"> Static only</label>
+    <label class="field">Privacy
+      <select class="input" aria-label="Privacy level"><option>standard</option><option>redact</option><option>strict</option></select>
+    </label>
+    <button class="btn btn--primary" type="button">Run scan</button>
+  </div>
+</section>
+
+<main>
+<div class="container">
+
+  <div class="grid row-1">
+    <!-- scores and severity -->
+    <section class="well ticks" aria-labelledby="h-scores">
+      <div class="well-head"><h2 id="h-scores">Scores</h2><span class="small muted mono">scan 7f3a2c9e, 38.2 s</span></div>
+      <div class="scores">
+        <div class="score">
+          <div class="label">Security</div>
+          <div class="big" id="secScore">0</div>
+          <div class="scale" aria-hidden="true"><i id="secBar"></i></div>
+          <div class="verdict" id="secLabel"></div>
+        </div>
+        <div class="score">
+          <div class="label">Optimization</div>
+          <div class="big" id="optScore">0</div>
+          <div class="scale" aria-hidden="true"><i id="optBar"></i></div>
+          <div class="verdict" id="optLabel"></div>
+        </div>
+      </div>
+      <div class="well-body" style="padding-top:var(--space-lg)">
+        <div class="sevbar" id="sevbar" role="img" aria-label="Findings by severity"></div>
+        <div class="sevlist" id="sevlist"></div>
+        <div class="fixfirst"><div class="sub">Fix first</div><ol id="fixfirst"></ol></div>
+      </div>
+      <div class="note">Heuristic estimates, not calibrated against CVE data. Sample data on this page.</div>
+    </section>
+
+    <!-- scan volume: the signature object -->
+    <section class="well ticks volume" aria-labelledby="h-vol">
+      <div class="well-head">
+        <h2 id="h-vol">Scan volume</h2>
+        <div class="vol-ctl">
+          <button class="btn" id="spin" type="button" aria-pressed="true">Pause</button>
+          <button class="btn btn--ghost" id="reset" type="button">Reset view</button>
+        </div>
+      </div>
+      <div class="stage" id="stage" tabindex="0" role="group" aria-label="Floor plan of scanned files with findings. Drag or use the arrow keys to turn it.">
+        <div class="scene" id="scene"></div>
+        <div class="hud hud-tl mono"><span class="muted">Azimuth</span> <span id="az">-32</span> deg</div>
+        <div class="hud hud-tr mono"><span class="muted">Files</span> 9 of 31 with findings</div>
+        <div class="hud hud-bl"><span><span class="sq" style="color:var(--sev-critical)"></span>Critical</span><span><span class="sq" style="color:var(--sev-high)"></span>High</span><span><span class="sq" style="color:var(--sev-medium)"></span>Medium</span><span><span class="sq" style="color:var(--sev-low)"></span>Low</span></div>
+      </div>
+      <div class="readout mono" id="readout" aria-live="polite">Drag to turn the floor. Each tile is a file, each pin a finding; taller means more confident.</div>
+    </section>
+  </div>
+
+  <div class="grid row-2">
+    <!-- findings ledger -->
+    <section class="well ticks" aria-labelledby="h-find">
+      <div class="well-head">
+        <h2 id="h-find">Findings</h2>
+        <div class="statebar" role="group" aria-label="Preview state (mockup only)">Preview
+          <button class="chip" type="button" data-state="full" aria-pressed="true">Full</button>
+          <button class="chip" type="button" data-state="loading" aria-pressed="false">Loading</button>
+          <button class="chip" type="button" data-state="empty" aria-pressed="false">Empty</button>
+          <button class="chip" type="button" data-state="error" aria-pressed="false">Error</button>
+        </div>
+      </div>
+      <div id="findRegion">
+        <div class="toolbar" id="toolbar">
+          <label class="visually-hidden" for="q">Search findings</label>
+          <input id="q" class="input" placeholder="Search issue, file or rule" autocomplete="off">
+          <button class="chip" type="button" data-sev="all" aria-pressed="true">All<span class="num" id="n-all"></span></button>
+          <button class="chip" type="button" data-sev="critical" aria-pressed="false">Critical<span class="num" id="n-critical"></span></button>
+          <button class="chip" type="button" data-sev="high" aria-pressed="false">High<span class="num" id="n-high"></span></button>
+          <button class="chip" type="button" data-sev="medium" aria-pressed="false">Medium<span class="num" id="n-medium"></span></button>
+          <button class="chip" type="button" data-sev="low" aria-pressed="false">Low<span class="num" id="n-low"></span></button>
+        </div>
+        <div id="tableWrap">
+          <table>
+            <thead><tr><th>Severity</th><th>Issue</th><th>Location</th><th class="col-src">Source</th><th class="r">Confidence</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <div class="tablefoot"><span id="foot"></span><span>Findings under 60% confidence are hidden</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- evidence -->
+    <section class="well ticks detail" aria-labelledby="h-detail" id="detail">
+      <div class="well-head"><h2 id="h-detail">Evidence</h2><span class="small muted mono" id="dId"></span></div>
+      <div class="well-body" id="dBody"></div>
+    </section>
+  </div>
+
+  <div class="grid row-3">
+    <section class="well ticks" aria-labelledby="h-pipe">
+      <div class="well-head"><h2 id="h-pipe">Pipeline</h2><span class="small muted mono">14:31:52 to 14:32:30 UTC</span></div>
+      <div class="well-body">
+        <ol class="axis" id="axis"></ol>
+        <div class="ticks-axis" aria-hidden="true"><span></span><div class="mono"><span>0 s</span><span>10</span><span>20</span><span>30</span><span>38 s</span></div><span></span></div>
+        <div class="legend"><span><span class="sq" style="color:var(--color-accent-2)"></span>Completed</span><span><span class="sq" style="color:var(--color-accent)"></span>Slowest phase</span><span>Static tools run in parallel</span></div>
+      </div>
+    </section>
+
+    <section class="well log ticks" aria-labelledby="h-log">
+    <div class="well-head"><h2 id="h-log">Activity</h2><span class="small muted">Pipeline and provider events</span></div>
+    <div class="logbody" id="logbody"></div>
+  </section>
+  </div>
+
+</div>
+</main>
+
+<script>
+/* Sample data. Scores use the project's own formula: 100 minus the sum of weight x confidence. */
+const W = { critical: 20, high: 10, medium: 5, low: 2, info: 0 };
+const SEV = ['critical','high','medium','low','info'];
+const LABEL = { critical:'Critical', high:'High', medium:'Medium', low:'Low', info:'Info' };
+const F = [
+ { id:'F-01', sev:'critical', conf:.95, issue:'SQL injection', cat:'security', file:'db.py', line:42, src:'bandit, llm', rule:'B608',
+   why:'The query is built by concatenating request input, so a crafted user_id changes the statement. Bandit and the LLM pass both flag this line.',
+   code:[[40,'def get_user(conn, user_id):',0],[41,'    cur = conn.cursor()',0],[42,'    cur.execute("SELECT * FROM users WHERE id=" + user_id)',1],[43,'    return cur.fetchone()',0]],
+   fix:[[42,'    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))',2]] },
+ { id:'F-02', sev:'critical', conf:.90, issue:'AWS secret key in source', cat:'secrets', file:'config.py', line:7, src:'gitleaks', rule:'aws-access-key',
+   why:'A long-lived credential is committed in the repository. Rotate it first, then load it from the environment.',
+   code:[[5,'DEBUG = False',0],[6,'REGION = "eu-west-1"',0],[7,'AWS_SECRET = "wJalr********************EXAMPLE"',1]],
+   fix:[[7,'AWS_SECRET = os.environ["AWS_SECRET_ACCESS_KEY"]',2]] },
+ { id:'F-03', sev:'high', conf:.85, issue:'Shell command built from input', cat:'injection', file:'app.py', line:118, src:'bandit', rule:'B605',
+   why:'os.system receives a string containing the host parameter, so shell metacharacters run as commands.',
+   code:[[116,'def ping(host):',0],[117,'    # check reachability',0],[118,'    os.system("ping -c 1 " + host)',1]],
+   fix:[[118,'    subprocess.run(["ping", "-c", "1", host], check=False)',2]] },
+ { id:'F-04', sev:'high', conf:.80, issue:'Unsafe deserialization', cat:'injection', file:'utils.py', line:63, src:'semgrep', rule:'pickle-loads',
+   why:'pickle.loads on data that arrives over the network can execute arbitrary code during loading.',
+   code:[[61,'def load_session(blob):',0],[62,'    # blob comes from the cookie',0],[63,'    return pickle.loads(blob)',1]],
+   fix:[[63,'    return json.loads(blob)',2]] },
+ { id:'F-05', sev:'high', conf:.75, issue:'eval of request data', cat:'injection', file:'app.py', line:131, src:'llm', rule:'llm',
+   why:'The expression string is taken from the request and evaluated, which allows arbitrary code execution.',
+   code:[[129,'def calc(request):',0],[130,'    expr = request.args["q"]',0],[131,'    return eval(expr)',1]],
+   fix:[[131,'    return ast.literal_eval(expr)',2]] },
+ { id:'F-06', sev:'medium', conf:.85, issue:'MD5 used for passwords', cat:'crypto', file:'auth.py', line:27, src:'bandit', rule:'B324',
+   why:'MD5 is fast and broken for password storage. Use a slow, salted hash such as argon2 or bcrypt.',
+   code:[[26,'def hash_pw(pw):',0],[27,'    return hashlib.md5(pw.encode()).hexdigest()',1]],
+   fix:[[27,'    return argon2.PasswordHasher().hash(pw)',2]] },
+ { id:'F-07', sev:'medium', conf:.70, issue:'TLS verification disabled', cat:'crypto', file:'client.py', line:15, src:'bandit', rule:'B501',
+   why:'verify=False accepts any certificate, so the connection can be intercepted.',
+   code:[[14,'def fetch(url):',0],[15,'    return requests.get(url, verify=False)',1]],
+   fix:[[15,'    return requests.get(url, timeout=10)',2]] },
+ { id:'F-08', sev:'low', conf:.60, issue:'assert used for an access check', cat:'access_control', file:'views.py', line:54, src:'llm', rule:'llm',
+   why:'Assertions are removed when Python runs with -O, so this check can disappear in production.',
+   code:[[53,'def admin_panel(user):',0],[54,'    assert user.is_admin',1]],
+   fix:[[54,'    if not user.is_admin:\n        raise PermissionError',2]] },
+ { id:'F-09', sev:'medium', conf:.60, issue:'Query inside a loop (N+1)', cat:'performance', file:'orders.py', line:88, src:'optimizer', rule:'OPT001',
+   why:'One query per order. Fetch the related rows once and group them in memory.',
+   code:[[86,'for order in orders:',0],[88,'    items = db.query(Item).filter_by(order_id=order.id).all()',1]],
+   fix:[[88,'items = db.query(Item).filter(Item.order_id.in_(ids)).all()',2]] },
+ { id:'F-10', sev:'low', conf:.60, issue:'String built with += in a loop', cat:'performance', file:'report.py', line:140, src:'optimizer', rule:'OPT002',
+   why:'Repeated concatenation copies the string each pass. Collect parts in a list and join once.',
+   code:[[139,'for r in rows:',0],[140,'    out += render(r)',1]],
+   fix:[[140,'    parts.append(render(r))   # then "".join(parts)',2]] },
+];
+const PHASES = [
+ ['Crawl and classify', 0.0, 0.9, '0.9 s'], ['Chunk', 0.9, 0.6, '0.6 s'],
+ ['Bandit', 1.5, 4.1, '4.1 s'], ['Semgrep', 1.5, 9.4, '9.4 s'], ['Gitleaks', 1.5, 2.3, '2.3 s'],
+ ['LLM, 14 chunks', 10.9, 24.6, '24.6 s'], ['Dedupe and correlate', 35.5, 0.7, '0.7 s'], ['Score and report', 36.2, 2.0, '2.0 s'],
+];
+const LOG = [
+ ['14:31:52','info','Crawling workspace, 31 files discovered'],
+ ['14:31:53','info','Static analysis started: bandit, semgrep, gitleaks'],
+ ['14:32:03','ok','Static analysis finished, 9 findings'],
+ ['14:32:04','info','LLM pass on 14 triggered chunks, 4 workers'],
+ ['14:32:11','warn','Groq rate limit on model openai/gpt-oss-20b, failing over to next model'],
+ ['14:32:29','ok','LLM pass finished, 3 findings kept above 60%'],
+ ['14:32:30','ok','Scan complete, 10 findings after dedupe'],
+];
+const $ = s => document.querySelector(s);
+const nf = new Intl.NumberFormat('en', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+let selected = 'F-01', sevFilter = 'all', query = '', state = 'full';
+
+const sec = Math.max(0, 100 - F.filter(f => f.cat !== 'performance').reduce((a, f) => a + W[f.sev] * f.conf, 0));
+const opt = Math.max(0, 100 - F.filter(f => f.cat === 'performance').reduce((a, f) => a + W[f.sev] * f.conf, 0));
+const label = s => s >= 90 ? 'Excellent' : s >= 75 ? 'Good' : s >= 55 ? 'Fair' : s >= 30 ? 'Poor' : 'Critical';
+const sevVar = s => `var(--sev-${s})`;
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+function renderScores() {
+  $('#secScore').innerHTML = nf.format(sec) + '<small>/ 100</small>';
+  $('#optScore').innerHTML = nf.format(opt) + '<small>/ 100</small>';
+  $('#secBar').style.setProperty('--v', sec / 100); $('#optBar').style.setProperty('--v', opt / 100);
+  const d = (now, prev) => { const x = now - prev; return Math.abs(x) < 0.05 ? '<span class="delta">No change since last scan</span>' : `<span class="delta ${x < 0 ? 'worse' : 'better'} mono">${x < 0 ? 'Down' : 'Up'} ${nf.format(Math.abs(x))} since last scan</span>`; };
+  $('#secLabel').innerHTML = label(sec) + d(sec, 33.2); $('#optLabel').innerHTML = label(opt) + d(opt, opt);
+  const counts = Object.fromEntries(SEV.map(s => [s, F.filter(f => f.sev === s).length]));
+  $('#sevbar').innerHTML = SEV.filter(s => counts[s]).map(s => `<span style="flex:${counts[s]};background:${sevVar(s)}"></span>`).join('');
+  $('#sevlist').innerHTML = SEV.map(s => `<div><b>${counts[s]}</b><span class="sq" style="color:${sevVar(s)}"></span>${LABEL[s]}</div>`).join('');
+  $('#navCount').textContent = counts.critical + counts.high;
+  $('#n-all').textContent = F.length; SEV.slice(0,4).forEach(s => $('#n-' + s).textContent = counts[s]);
+}
+function renderPipeline() {
+  const total = 38.2, slow = Math.max(...PHASES.map(p => p[2]));
+  $('#axis').innerHTML = PHASES.map(p => `<li class="phase${p[2] === slow ? ' active' : ''}"><span>${p[0]}</span><span class="track"><span class="bar" style="left:${p[1]/total*100}%;width:${p[2]/total*100}%"></span></span><span class="t mono">${p[3]}</span></li>`).join('');
+}
+function visible() {
+  return [...F].sort((a, b) => SEV.indexOf(a.sev) - SEV.indexOf(b.sev) || b.conf - a.conf).filter(f => (sevFilter === 'all' || f.sev === sevFilter) &&
+    (!query || (f.issue + f.file + f.rule).toLowerCase().includes(query)));
+}
+function renderRows() {
+  const v = visible();
+  $('#rows').innerHTML = v.length ? v.map(f => `<tr tabindex="0" data-id="${f.id}" aria-selected="${f.id === selected}">
+    <td><span class="sevcell" style="color:${sevVar(f.sev)}"><span class="sq"></span><span style="color:var(--color-ink)">${LABEL[f.sev]}</span></span></td>
+    <td><span class="issue">${esc(f.issue)}</span></td>
+    <td class="loc mono">${f.file}:${f.line}</td>
+    <td class="col-src src">${f.src}</td>
+    <td class="r num mono">${Math.round(f.conf*100)}%</td></tr>`).join('')
+    : `<tr><td colspan="5" style="height:120px;color:var(--color-muted);padding-left:var(--space-lg)">No findings match this filter. <button class="btn btn--ghost" type="button" id="clearf">Clear filters</button></td></tr>`;
+  $('#foot').textContent = `${v.length} of ${F.length} findings`;
+  const c = $('#clearf'); if (c) c.onclick = () => { sevFilter = 'all'; query = ''; $('#q').value = ''; syncChips(); renderRows(); };
+}
+function renderDetail() {
+  if (typeof markPins === 'function') markPins();
+  const f = F.find(x => x.id === selected);
+  if (!f) { $('#dBody').innerHTML = `<div class="state"><h3>Select a finding</h3><p>Its evidence, the reason it was raised and a suggested fix appear here.</p></div>`; $('#dId').textContent = ''; return; }
+  $('#dId').textContent = f.id;
+  const line = (n, t, k) => `<span class="${k===1?'hit':k===2?'add':''}"><span class="ln">${n}</span>${esc(t)}</span>`;
+  $('#dBody').innerHTML = `
+    <div><span class="sevcell" style="color:${sevVar(f.sev)}"><span class="sq"></span><span style="color:var(--color-ink)">${LABEL[f.sev]}</span></span></div>
+    <h3>${esc(f.issue)}</h3>
+    <div class="facts">
+      <div>Confidence<b>${Math.round(f.conf*100)}%</b></div>
+      <div>Location<b>${f.file}:${f.line}</b></div>
+      <div>Rule<b>${f.rule}</b></div>
+    </div>
+    <p>${esc(f.why)}</p>
+    <div><div class="sub">Evidence</div><pre>${f.code.map(c => line(c[0], c[1], c[2])).join('')}</pre></div>
+    <div><div class="sub">Suggested fix</div><pre>${f.fix.map(c => line(c[0], c[1], c[2])).join('')}</pre></div>
+    <div class="actions"><button class="btn btn--primary" type="button">Copy patch</button><button class="btn" type="button">Open file</button><button class="btn btn--ghost" type="button">Suppress in baseline</button></div>`;
+}
+function renderLog() {
+  $('#logbody').innerHTML = LOG.map(l => `<div><span class="ts">${l[0]}</span><span class="${l[1]}">${l[1]}</span><span>${esc(l[2])}</span></div>`).join('');
+}
+function syncChips() {
+  document.querySelectorAll('[data-sev]').forEach(b => b.setAttribute('aria-pressed', b.dataset.sev === sevFilter));
+}
+function setState(s) {
+  state = s;
+  document.querySelectorAll('[data-state]').forEach(b => b.setAttribute('aria-pressed', b.dataset.state === s));
+  const r = $('#findRegion');
+  if (s === 'full') {
+    mountFull(); return;
+  }
+  const states = {
+    loading: `<div role="status" aria-label="Loading findings">${Array(6).fill('<div class="skel"><i></i><i></i><i></i><i></i></div>').join('')}</div>`,
+    empty: `<div class="state"><h3>No findings in this scan</h3><p>Nothing above 60% confidence was found in 31 files. Run a deep scan to send every chunk to the LLM pass.</p><button class="btn btn--primary" type="button">Run deep scan</button></div>`,
+    error: `<div class="state" role="alert"><h3 style="color:var(--color-error)">The scan did not finish</h3><p>Semgrep timed out after 120 s, so static results are incomplete. The LLM pass was not started. Retry, or run with static only off to skip Semgrep.</p><div class="actions"><button class="btn btn--primary" type="button">Retry scan</button><button class="btn" type="button">View log</button></div></div>`,
+  };
+  r.innerHTML = states[s];
+}
+const TOOLBAR = `
+  <label class="visually-hidden" for="q">Search findings</label>
+  <input id="q" class="input" placeholder="Search issue, file or rule" autocomplete="off">
+  <button class="chip" type="button" data-sev="all" aria-pressed="true">All<span class="num" id="n-all"></span></button>
+  <button class="chip" type="button" data-sev="critical" aria-pressed="false">Critical<span class="num" id="n-critical"></span></button>
+  <button class="chip" type="button" data-sev="high" aria-pressed="false">High<span class="num" id="n-high"></span></button>
+  <button class="chip" type="button" data-sev="medium" aria-pressed="false">Medium<span class="num" id="n-medium"></span></button>
+  <button class="chip" type="button" data-sev="low" aria-pressed="false">Low<span class="num" id="n-low"></span></button>`;
+const TABLE = `<div id="tableWrap"><table><thead><tr><th>Severity</th><th>Issue</th><th>Location</th><th class="col-src">Source</th><th class="r">Confidence</th></tr></thead><tbody id="rows"></tbody></table><div class="tablefoot"><span id="foot"></span><span>Findings under 60% confidence are hidden</span></div></div>`;
+function mountFull() {
+  $('#findRegion').innerHTML = `<div class="toolbar" id="toolbar">${TOOLBAR}</div>${TABLE}`;
+  renderScores(); syncChips(); renderRows(); wire();
+}
+function wire() {
+  $('#q').value = query;
+  $('#q').oninput = e => { query = e.target.value.trim().toLowerCase(); renderRows(); };
+  document.querySelectorAll('[data-sev]').forEach(b => b.onclick = () => { sevFilter = b.dataset.sev; syncChips(); renderRows(); });
+}
+document.addEventListener('click', e => {
+  const tr = e.target.closest('tbody tr[data-id]');
+  if (tr) { selected = tr.dataset.id; renderRows(); renderDetail(); }
+  const st = e.target.closest('[data-state]');
+  if (st) setState(st.dataset.state);
+});
+document.addEventListener('keydown', e => {
+  const tr = e.target.closest && e.target.closest('tbody tr[data-id]');
+  if (!tr) return;
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selected = tr.dataset.id; renderRows(); renderDetail(); $(`tr[data-id="${selected}"]`).focus(); }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const n = e.key === 'ArrowDown' ? tr.nextElementSibling : tr.previousElementSibling; if (n && n.dataset.id) n.focus(); }
+});
+
+
+/* ---- 3D scan volume ---- */
+const TILES = [
+ ['app.py',0,0,210,150],['db.py',220,0,150,110],['config.py',380,0,180,110],['auth.py',0,160,120,110],['client.py',130,160,80,110],
+ ['utils.py',220,120,150,150],['views.py',380,120,180,70],['orders.py',380,200,90,70],['report.py',480,200,80,70]];
+const PINPOS = { 'F-01':[295,55],'F-02':[440,40],'F-03':[60,60],'F-05':[140,100],'F-04':[295,195],'F-06':[60,215],'F-07':[170,215],'F-08':[470,155],'F-09':[425,235],'F-10':[520,235] };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let offset = 0, spinning = !reduce, t0 = performance.now(), lastAz = null;
+
+function buildScene() {
+  const sc = $('#scene');
+  const worst = {};
+  F.forEach(f => { if (!worst[f.file] || SEV.indexOf(f.sev) < SEV.indexOf(worst[f.file])) worst[f.file] = f.sev; });
+  let html = '<div class="floor-base"></div>';
+  html += TILES.map(([n,x,y,w,h]) => `<div class="tile${worst[n] ? ' hit' : ''}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;${worst[n] ? '--sev:' + sevVar(worst[n]) : ''}"><span>${n}</span></div>`).join('');
+  html += F.map(f => { const [x, y] = PINPOS[f.id]; return `<div class="mark" style="left:${x}px;top:${y}px;--sev:${sevVar(f.sev)}"></div>`; }).join('');
+  html += '<div class="wall"></div>';
+  html += F.map(f => {
+    const [x, y] = PINPOS[f.id];
+    const h = Math.round(30 + f.conf * 90), d = ((x + 10) / 580 * 6).toFixed(2);
+    return `<div class="pin" data-id="${f.id}" style="--x:${x}px;--y:${y}px;--h:${h}px;--d:${d}s;--sev:${sevVar(f.sev)}"><i class="stem"></i><button class="cap" type="button" data-pin="${f.id}" aria-label="${esc(f.issue)}, ${f.file} line ${f.line}"></button></div>`;
+  }).join('');
+  sc.innerHTML = html;
+}
+function say(f) {
+  $('#readout').innerHTML = f
+    ? `<span><b>${f.id}</b>&nbsp; ${LABEL[f.sev]}&nbsp; <b>${esc(f.issue)}</b>&nbsp; ${f.file}:${f.line}&nbsp; ${Math.round(f.conf * 100)}% confidence</span>`
+    : 'Drag to turn the floor. Each tile is a file, each pin a finding; taller means more confident.';
+}
+function markPins() {
+  document.querySelectorAll('.pin').forEach(p => p.classList.toggle('sel', p.dataset.id === selected));
+}
+function applyView(rot) {
+  const sc = $('#scene'), st = $('#stage');
+  const k = Math.max(0.62, Math.min(1.3, st.clientWidth / 720));
+  sc.style.setProperty('--rot', rot.toFixed(2) + 'deg');
+  sc.style.transform = `rotateX(58deg) rotateZ(${rot.toFixed(2)}deg) scale(${k.toFixed(3)})`;
+  const az = Math.round(rot);
+  if (az !== lastAz) { lastAz = az; $('#az').textContent = az; }
+}
+function frame(now) {
+  const sway = spinning ? 12 * Math.sin((now - t0) / 6500) : 0;
+  applyView(-32 + sway + offset);
+  requestAnimationFrame(frame);
+}
+function initVolume() {
+  buildScene(); markPins();
+  const st = $('#stage'), sc = $('#scene');
+  let drag = null;
+  st.addEventListener('pointerdown', e => { if (e.target.closest('.cap')) return; drag = { x: e.clientX, o: offset }; st.setPointerCapture(e.pointerId); });
+  st.addEventListener('pointermove', e => { if (drag) offset = drag.o + (e.clientX - drag.x) * 0.35; });
+  st.addEventListener('pointerup', () => { drag = null; });
+  st.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') { offset -= 6; e.preventDefault(); } if (e.key === 'ArrowRight') { offset += 6; e.preventDefault(); } });
+  sc.addEventListener('mouseover', e => { const c = e.target.closest('.cap'); if (c) say(F.find(f => f.id === c.dataset.pin)); });
+  sc.addEventListener('mouseout', e => { if (e.target.closest('.cap')) say(null); });
+  sc.addEventListener('focusin', e => { const c = e.target.closest('.cap'); if (c) say(F.find(f => f.id === c.dataset.pin)); });
+  sc.addEventListener('focusout', () => say(null));
+  sc.addEventListener('click', e => { const c = e.target.closest('.cap'); if (c) { selected = c.dataset.pin; renderRows(); renderDetail(); } });
+  $('#spin').addEventListener('click', e => {
+    spinning = !spinning; e.currentTarget.setAttribute('aria-pressed', spinning); e.currentTarget.textContent = spinning ? 'Pause' : 'Play';
+    sc.classList.toggle('paused', !spinning);
+  });
+  $('#reset').addEventListener('click', () => { offset = 0; });
+  if (reduce) { $('#spin').textContent = 'Play'; $('#spin').setAttribute('aria-pressed', 'false'); sc.classList.add('paused'); }
+  requestAnimationFrame(frame);
+}
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('aegis-theme', t); } catch (e) { /* private mode: keep for this visit only */ }
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === t));
+}
+document.querySelectorAll('[data-theme-set]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themeSet)));
+setTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+function renderFixFirst() {
+  $('#fixfirst').innerHTML = [...F].sort((a, b) => SEV.indexOf(a.sev) - SEV.indexOf(b.sev) || b.conf - a.conf).slice(0, 4)
+    .map(f => `<li><button type="button" data-fix="${f.id}"><span class="sq" style="color:${sevVar(f.sev)}"></span><span>${esc(f.issue)}</span><span class="loc mono">${f.file}:${f.line}</span></button></li>`).join('');
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-fix]'); if (b) { selected = b.dataset.fix; renderRows(); renderDetail(); } });
+
+renderScores(); renderPipeline(); renderRows(); renderDetail(); renderLog(); wire(); renderFixFirst(); initVolume();
+</script>
+</body>
+</html>

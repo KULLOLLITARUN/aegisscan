@@ -298,12 +298,18 @@ def test_auditor_counts_json_failed(monkeypatch) -> None:
 def test_run_without_history_writes_no_database(tmp_path: Path, monkeypatch) -> None:
     import main
 
+    db = tmp_path / "data" / "history.db"
+    monkeypatch.setenv("AEGISSCAN_HISTORY_DB", str(db))
+    target = tmp_path / "project"
+    target.mkdir()
     monkeypatch.setattr(main, "run_all_tools", lambda *a, **k: ([], []))
-    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
-    main.run(tmp_path, static_only=True, record_history=False)
-    assert not (tmp_path / ".aegisscan_history.db").exists()
-    main.run(tmp_path, static_only=True)
-    assert (tmp_path / ".aegisscan_history.db").exists()
+    (target / "a.py").write_text("x = 1\n", encoding="utf-8")
+    main.run(target, static_only=True, record_history=False)
+    assert not db.exists()
+    main.run(target, static_only=True)
+    assert db.exists()
+    # nothing is ever written into the folder that was scanned
+    assert sorted(p.name for p in target.iterdir()) == ["a.py"]
 
 
 def test_cli_accepts_benchmark_json_flag() -> None:

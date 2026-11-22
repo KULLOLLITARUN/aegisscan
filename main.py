@@ -441,8 +441,7 @@ def run(
     if record_history:
         try:
             from scanner.storage.history import ScanHistoryDB
-            db_file = path / ".aegisscan_history.db"
-            ScanHistoryDB(db_path=db_file).record_scan(result)
+            ScanHistoryDB().record_scan(result)
         except Exception as exc:
             log.warning("Failed to record scan to history DB: %s", exc)
 
@@ -450,8 +449,8 @@ def run(
 
 
 def _print_history(target_path: Path) -> None:
-    from scanner.storage.history import ScanHistoryDB
-    db_file = target_path / ".aegisscan_history.db"
+    from scanner.storage.history import ScanHistoryDB, default_db_path
+    db_file = default_db_path()
     db = ScanHistoryDB(db_path=db_file)
     history = db.get_history(limit=15)
 

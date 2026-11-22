@@ -189,8 +189,8 @@ def generate_html(result: ScanResult, output_path: Path) -> None:
 
     history_card_html = ""
     try:
-        from scanner.storage.history import ScanHistoryDB
-        db_file = result.target_path / ".aegisscan_history.db"
+        from scanner.storage.history import ScanHistoryDB, default_db_path
+        db_file = default_db_path()
         if db_file.exists():
             db = ScanHistoryDB(db_path=db_file)
             history = db.get_history(limit=5)

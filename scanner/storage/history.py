@@ -6,6 +6,7 @@ Manages recording and querying historical scan results and security score trends
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -15,15 +16,28 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_DB_NAME = ".aegisscan_history.db"
+_DEFAULT_DB_NAME = "history.db"
 _SCHEMA_FILE = Path(__file__).parent / "schema.sql"
+
+
+def default_db_path() -> Path:
+    """Where scan history lives: one file in AegisScan's own data folder, never inside a scanned folder.
+
+    Override with AEGISSCAN_HISTORY_DB (a file path).
+    """
+    override = os.environ.get("AEGISSCAN_HISTORY_DB", "").strip()
+    if override:
+        return Path(override).expanduser()
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(base) / "AegisScan" / _DEFAULT_DB_NAME
 
 
 class ScanHistoryDB:
     """SQLite engine for storing and analyzing AegisScan history."""
 
     def __init__(self, db_path: Path | None = None) -> None:
-        self.db_path = db_path or Path(_DEFAULT_DB_NAME)
+        self.db_path = db_path or default_db_path()
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:

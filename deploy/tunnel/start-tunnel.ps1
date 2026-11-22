@@ -106,6 +106,30 @@ if (-not $NoTunnel) {
   }
 }
 
+# ---- stop a leftover copy from an earlier run (closing the window does not stop its programs) ----
+function Stop-OldAegisScan([int]$p) {
+  $needle = "127.0.0.1:$p"
+  $old = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.ProcessId -ne $PID -and $_.CommandLine -and (
+      ($_.Name -eq 'cloudflared.exe' -and $_.CommandLine.Contains($needle)) -or
+      ($_.Name -match '^python' -and $_.CommandLine -match 'main\.py\s+--server'))
+  })
+  # a leftover server is only ours if it is the one holding this port
+  $holders = @(Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | ForEach-Object { $_.OwningProcess })
+  foreach ($o in $old) {
+    if ($o.Name -match '^python' -and ($holders -notcontains $o.ProcessId)) { continue }
+    Write-Host "Stopping the previous AegisScan (process $($o.ProcessId), $($o.Name))..."
+    & taskkill.exe /PID $o.ProcessId /T /F 2>$null | Out-Null
+  }
+  if ($old.Count) { Start-Sleep -Seconds 1 }
+  $still = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($still) {
+    $name = (Get-Process -Id $still.OwningProcess -ErrorAction SilentlyContinue).ProcessName
+    throw "Port $p is in use by another program ($name, process $($still.OwningProcess)). Close it, or run again with -Port <another number>."
+  }
+}
+Stop-OldAegisScan $Port
+
 $server = $null
 $tunnel = $null
 try {

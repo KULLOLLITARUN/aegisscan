@@ -351,6 +351,30 @@ def test_sanitize_text_and_result(tmp_path) -> None:
     assert result.target_path == Path("my-app") and result.findings[0].file_path == Path("a.py")
 
 
+def test_stream_keeps_the_connection_busy_during_a_quiet_scan(monkeypatch) -> None:
+    """Tunnels and proxies cut connections that send nothing for ~100 s, and Semgrep can be silent
+    that long. The stream must send keep-alive comments, still deliver the result, then go quiet."""
+    import time
+
+    monkeypatch.setenv("AEGISSCAN_SSE_KEEPALIVE_S", "0.3")
+    wid, _ = _workspace_with_code({"a.py": "x = 1\n"})
+
+    def quiet_run(**kwargs):
+        time.sleep(1.3)  # no progress events at all
+        return _result_for(kwargs["path"]), None, None
+
+    monkeypatch.setattr("main.run", quiet_run)
+    h = _handler("POST", "/api/scan/stream", body={"upload_id": wid}, headers=_auth())
+    h.do_POST()
+    text = h.wfile.getvalue().decode()
+    assert text.count(": keepalive") >= 2
+    assert "event: complete" in text
+
+    size = len(h.wfile.getvalue())
+    time.sleep(0.9)
+    assert len(h.wfile.getvalue()) == size  # the heartbeat stopped when the stream closed
+
+
 def test_delete_workspace_removes_read_only_files() -> None:
     """git marks pack files read-only; a plain rmtree(ignore_errors=True) leaves them behind on Windows."""
     import os

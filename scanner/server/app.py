@@ -42,6 +42,14 @@ _LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
 _MAX_JSON_BODY = 1024 * 1024  # scan requests are small JSON documents
 
 
+def _sse_keepalive_seconds() -> float:
+    """Seconds between SSE keep-alive comments (AEGISSCAN_SSE_KEEPALIVE_S, default 15)."""
+    try:
+        return max(0.2, float(os.environ.get("AEGISSCAN_SSE_KEEPALIVE_S", "15")))
+    except ValueError:
+        return 15.0
+
+
 def _ui_build_hint() -> str | None:
     """How to get the React dashboard when only the basic fallback page is available.
     The build output (scanner/server/dist) is not committed; see the README."""
@@ -382,6 +390,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Connection", "keep-alive")
         self.end_headers()
         lock = threading.Lock()
+        stop = threading.Event()
 
         def sse(event: str, data: Any) -> None:
             payload = f"event: {event}\ndata: {json.dumps(data)}\n\n"
@@ -392,6 +401,20 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
 
+        def heartbeat() -> None:
+            # A quiet scan step (Semgrep can run for minutes) sends no events, and proxies and
+            # tunnels (Cloudflare closes idle connections after about 100 s) would cut the stream.
+            # SSE comment lines are ignored by the browser but keep the connection busy.
+            while not stop.wait(_sse_keepalive_seconds()):
+                with lock:
+                    try:
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
+                    except Exception:
+                        return
+
+        threading.Thread(target=heartbeat, name="aegisscan-sse-keepalive", daemon=True).start()
+        sse.close = stop.set  # type: ignore[attr-defined]
         return sse
 
     # ------------------------------------------------------------------ local scans
@@ -459,6 +482,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             import traceback
             log.error("SSE scan error: %s\n%s", exc, traceback.format_exc())
             sse("error", {"error": str(exc)})
+        finally:
+            sse.close()
 
     def _local_sync(self, target_path: Path, p: dict) -> None:
         if not target_path.exists() or not target_path.is_dir():
@@ -613,6 +638,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             log.error("Hosted scan error: %s", exc, exc_info=True)
             sse("error", {"error": hosted.sanitize_text(str(exc), target, label)})
+        finally:
+            sse.close()
 
     def _hosted_sync(self, target: Path, label: str, p: dict, on_finish, prepare=None) -> None:
         try:

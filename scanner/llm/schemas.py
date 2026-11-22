@@ -19,11 +19,25 @@ class LLMFindingDraft(BaseModel):
     category: str = "best_practices"
     severity: str = "low"                       # will be mapped to Severity enum
     confidence: float = Field(default=0.70, ge=0.0, le=1.0)
-    line_start: int = 1
-    line_end: int = 1
+    # None = the model gave no usable line; the auditor then locates the finding by its evidence
+    # snippet, and failing that anchors it at the chunk start (never a silent "line 1" of the file).
+    line_start: Optional[int] = None
+    line_end: Optional[int] = None
     evidence: str = ""
     explanation: str = ""
     suggested_fix: Optional[str] = None
+
+    @field_validator("line_start", "line_end", mode="before")
+    @classmethod
+    def lenient_line(cls, v: object) -> Optional[int]:
+        """Accept ints and numeric strings; anything else (missing, null, 'n/a', <1) means unlocated."""
+        if isinstance(v, bool):
+            return None
+        try:
+            n = int(v)  # type: ignore[call-overload]
+        except (TypeError, ValueError):
+            return None
+        return n if n >= 1 else None
 
     @field_validator("severity", mode="before")
     @classmethod

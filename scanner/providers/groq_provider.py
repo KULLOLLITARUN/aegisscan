@@ -62,6 +62,7 @@ class GroqProvider(LLMProvider):
         self._dead_models: set[str] = set()         # models Groq said do not exist for this key
         self._served: set[str] | None = None        # ids from models.list(); None = unknown
         self._served_checked = False
+        self.rate_limit_hits = 0                    # 429s seen; the manager adds these to its telemetry
 
         if not self._api_key:
             log.warning(
@@ -153,6 +154,8 @@ class GroqProvider(LLMProvider):
             except Exception as exc:
                 exc_str = str(exc)
                 if "429" in exc_str or "rate_limit" in exc_str.lower():
+                    with self._lock:
+                        self.rate_limit_hits += 1
                     log.warning("Groq rate limit on model %s — failing over to next model...", current_model)
                     time.sleep(0.2)
                     continue

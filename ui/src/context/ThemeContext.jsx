@@ -2,31 +2,30 @@ import { createContext, useContext, useState, useCallback } from 'react'
 
 const ThemeContext = createContext(null)
 
-// index.html stamps document.documentElement.dataset.theme before React mounts
-// (avoids a flash of the wrong theme) — read that as the initial value here.
+// index.html stamps data-theme (day | night) before React mounts to avoid a flash.
 function initialTheme() {
-  if (typeof document === 'undefined') return 'light'
-  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+  if (typeof document === 'undefined') return 'day'
+  return document.documentElement.dataset.theme === 'night' ? 'night' : 'day'
 }
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(initialTheme)
+  const [theme, setThemeState] = useState(initialTheme)
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev === 'dark' ? 'light' : 'dark'
-      document.documentElement.dataset.theme = next
-      try {
-        localStorage.setItem('aegisscan-theme', next)
-      } catch {
-        // localStorage unavailable — theme still applies for this session
-      }
-      return next
-    })
+  const setTheme = useCallback((next) => {
+    const t = next === 'night' ? 'night' : 'day'
+    document.documentElement.dataset.theme = t
+    setThemeState(t)
+    try {
+      localStorage.setItem('aegis-theme3', t)
+    } catch {
+      // storage unavailable: theme still applies for this visit
+    }
   }, [])
 
+  const toggleTheme = useCallback(() => setTheme(theme === 'night' ? 'day' : 'night'), [theme, setTheme])
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   )

@@ -3,22 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AegisScan — Command Deck</title>
+    <title>AegisScan survey console</title>
     <meta name="description" content="AI-Driven Workspace Security & Optimization Scanner" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rethink+Sans:wght@400;500;600&family=Spline+Sans+Mono:wght@400&display=swap" rel="stylesheet">
     <script>
       // Set theme before first paint to avoid a flash of the wrong theme.
       (function () {
+        var t = 'day';
         try {
-          var saved = localStorage.getItem('aegisscan-theme');
-          document.documentElement.dataset.theme = saved === 'dark' ? 'dark' : 'light';
-        } catch (e) {
-          // localStorage unavailable (privacy mode, etc.) — fall back to light.
-          console.debug('AegisScan: theme preference unavailable', e);
-          document.documentElement.dataset.theme = 'light';
-        }
+          t = localStorage.getItem('aegis-theme3') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day');
+        } catch (e) { /* storage unavailable: default to day */ }
+        document.documentElement.setAttribute('data-theme', t === 'night' ? 'night' : 'day');
       })();
     </script>
   </head>

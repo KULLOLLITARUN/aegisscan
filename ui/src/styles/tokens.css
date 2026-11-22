@@ -1,0 +1,66 @@
+/* AegisScan design tokens. Day = pale spruce glass, Night = deep spruce.
+   Source of truth: Plans/ui_redesign_v3.html. */
+:root {
+  color-scheme: light;
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px;
+  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem;
+  --text-hero: 5.6rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 500ms;
+  --rail-w: 76px; --inspector-w: 420px; --cmd-h: 56px; --timeline-h: 120px;
+  --z-stage: 1; --z-overlay: 5; --z-cmd: 300;
+
+  --paper: oklch(96% 0.012 170); --paper-2: oklch(99% 0.006 170); --paper-3: oklch(92% 0.018 170);
+  --ink: oklch(21% 0.05 175); --ink-2: oklch(33% 0.045 175); --muted: oklch(47% 0.035 175); --muted-2: oklch(63% 0.025 175);
+  --line: oklch(84% 0.025 170); --line-2: oklch(90% 0.018 170);
+  --accent: oklch(44% 0.10 170); --accent-hover: oklch(39% 0.10 170); --accent-press: oklch(34% 0.09 170); --accent-ink: oklch(98% 0.01 170); --focus: oklch(55% 0.14 170);
+  --sev-critical: oklch(53% 0.21 25); --sev-high: oklch(60% 0.17 55); --sev-medium: oklch(68% 0.15 88); --sev-low: oklch(52% 0.12 235); --sev-info: oklch(55% 0.02 170);
+  --code-key: oklch(44% 0.12 250); --code-str: oklch(45% 0.12 150); --code-com: var(--muted-2);
+  --good: oklch(46% 0.13 150); --bad: var(--sev-critical);
+  --font-display: "Rethink Sans", ui-sans-serif, system-ui, sans-serif; --font-body: var(--font-display);
+  --font-outlier: "Spline Sans Mono", ui-monospace, monospace;
+  --radius: 0; --rule-hair: 1px;
+
+  /* ---- legacy aliases: keep the Files / Findings / Scans / Logs pages themed ---- */
+  --bg-base: var(--paper); --bg-surface: var(--paper-2); --bg-card: var(--paper-2);
+  --bg-card-hover: var(--paper-3); --bg-card-sub: var(--paper-3); --bg-card-3: var(--line-2);
+  --border: var(--line); --border-muted: var(--line-2);
+  --border-active: color-mix(in oklab, var(--accent) 45%, transparent);
+  --text-primary: var(--ink); --text-dim: var(--ink-2); --text-muted: var(--muted);
+  --accent-dim: color-mix(in oklab, var(--accent) 12%, transparent);
+  --accent-gradient: linear-gradient(var(--accent), var(--accent));
+  --ember-glow: transparent;
+  --critical: var(--sev-critical); --high: var(--sev-high); --medium: var(--sev-medium); --low: var(--sev-low); --info: var(--sev-info);
+  --critical-bg: color-mix(in oklab, var(--sev-critical) 12%, transparent);
+  --high-bg: color-mix(in oklab, var(--sev-high) 12%, transparent);
+  --medium-bg: color-mix(in oklab, var(--sev-medium) 14%, transparent);
+  --low-bg: color-mix(in oklab, var(--sev-low) 12%, transparent);
+  --info-bg: color-mix(in oklab, var(--sev-info) 12%, transparent);
+  --cat-injection: var(--sev-critical); --cat-secrets: var(--sev-high); --cat-access_control: var(--sev-low);
+  --cat-crypto: var(--accent); --cat-performance: var(--sev-medium); --cat-best_practices: var(--muted); --cat-other: var(--muted-2);
+  --console-bg: var(--paper-3); --console-border: var(--line); --console-ts: var(--muted-2);
+  --console-ok: var(--good); --console-warn: var(--sev-medium); --console-info: var(--sev-low);
+  --console-msg: var(--ink-2); --console-hl: var(--ink);
+  --panel-shadow: none; --sidebar-w: 0px; --topbar-h: 0px;
+}
+:root[data-theme="night"] {
+  color-scheme: dark;
+  --paper: oklch(18% 0.03 175); --paper-2: oklch(22% 0.032 175); --paper-3: oklch(14.5% 0.028 175);
+  --ink: oklch(94% 0.02 165); --ink-2: oklch(84% 0.025 165); --muted: oklch(70% 0.03 170); --muted-2: oklch(54% 0.03 172);
+  --line: oklch(33% 0.04 175); --line-2: oklch(26% 0.035 175);
+  --accent: oklch(78% 0.13 165); --accent-hover: oklch(83% 0.13 165); --accent-press: oklch(72% 0.12 165); --accent-ink: oklch(16% 0.03 175); --focus: oklch(84% 0.13 165);
+  --sev-critical: oklch(70% 0.19 25); --sev-high: oklch(76% 0.15 58); --sev-medium: oklch(84% 0.14 95); --sev-low: oklch(76% 0.11 235); --sev-info: oklch(70% 0.02 170);
+  --code-key: oklch(78% 0.11 250); --code-str: oklch(80% 0.12 150);
+  --good: oklch(78% 0.13 150);
+}
+html, body { height: 100%; overflow-x: clip; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--font-body); font-size: var(--text-md); line-height: 1.5;
+  -webkit-font-smoothing: antialiased; caret-color: var(--accent);
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

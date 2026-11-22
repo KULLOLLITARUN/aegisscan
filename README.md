@@ -216,3 +216,9 @@ Static tools: Bandit and the built-in optimizer ship with the package; install S
 The web server (`--server`) binds to `127.0.0.1`, sends no CORS headers and rejects non-local `Host`/`Origin` headers.
 
 Tree-sitter chunking covers Python, JavaScript, TypeScript, Go, Java, PHP and C#; other languages (including SQL) use the generic chunker.
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).

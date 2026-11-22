@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import CommandBar from './components/shell/CommandBar'
 import RailNav from './components/shell/RailNav'
+import TokenGate from './components/shell/TokenGate'
 import ScanPage from './pages/ScanPage'
 import FindingsPage from './pages/FindingsPage'
 import FilesPage from './pages/FilesPage'
@@ -22,6 +23,7 @@ export default function App() {
       <ScanProvider>
         <BrowserRouter>
           <div className="ag-app">
+            <TokenGate />
             <CommandBar />
             <RailNav />
             <Routes>

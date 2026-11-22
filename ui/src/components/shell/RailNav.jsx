@@ -11,7 +11,8 @@ const ITEMS = [
 ]
 
 export default function RailNav() {
-  const { scanResult, scanning } = useScan()
+  const { scanResult, scanning, config } = useScan()
+  const showHistory = config?.features?.history !== false
   const urgent = (scanResult?.findings ?? []).filter((f) => {
     const s = normSeverity(f.severity)
     return s === 'critical' || s === 'high'
@@ -19,7 +20,7 @@ export default function RailNav() {
 
   return (
     <nav className="ag-rail" aria-label="Primary">
-      {ITEMS.map((it) => (
+      {ITEMS.filter((it) => it.to !== '/scans' || showHistory).map((it) => (
         <NavLink key={it.to} to={it.to}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d={it.icon} /></svg>
           {it.label}

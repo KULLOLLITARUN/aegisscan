@@ -274,3 +274,18 @@ select.ag-input { padding-right: var(--space-md); }
   .ag-split { grid-template-columns: minmax(0, 1fr); }
   .ag-filelist { max-height: 240px; }
 }
+
+/* ---------- hosted mode: source picker and access token gate ---------- */
+.ag-source { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; flex: 1 1 320px; }
+.ag-source .ag-path { flex: 1 1 200px; max-width: 420px; }
+.ag-source-note { font-size: var(--text-xs); color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-source-note[role="alert"] { color: var(--bad); white-space: normal; }
+.ag-gate { position: fixed; z-index: 401; top: 50%; left: 50%; width: min(420px, calc(100vw - 32px)); transform: translate(-50%, -50%); display: grid; gap: var(--space-sm); padding: var(--space-lg); background: var(--paper-2); border: var(--rule-hair) solid var(--ink); }
+.ag-gate h2 { margin: 0; }
+.ag-gate p { margin: 0; font-size: var(--text-sm); }
+.ag-error { color: var(--bad); }
+
+@media (max-width: 62rem) {
+  .ag-source { flex-wrap: wrap; flex: 1 1 100%; }
+  .ag-source-note { white-space: normal; }
+}

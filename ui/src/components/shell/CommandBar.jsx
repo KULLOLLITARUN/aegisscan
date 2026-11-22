@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useScan } from '../../context/ScanContext'
 import { useTheme } from '../../context/ThemeContext'
+import SourcePicker from './SourcePicker'
 
 function ThemeSwitch() {
   const { theme, setTheme } = useTheme()
@@ -64,10 +65,12 @@ function MoreOptions() {
 }
 
 export default function CommandBar() {
-  const { scanning, scanResult, progress, scanError, startScan, targetPath, setTargetPath, options, setOptions } = useScan()
+  const { config, hosted, scanning, scanResult, progress, scanError, startScan, targetPath, setTargetPath, options, setOptions } = useScan()
+  const showScanOptions = !hosted || !!config?.features?.llm
 
   let status = 'Idle'
-  if (scanning) status = `Scanning, ${progress.pct}%`
+  if (!config) status = 'Connecting'
+  else if (scanning) status = `Scanning, ${progress.pct}%`
   else if (scanError) status = 'Scan failed'
   else if (scanResult) status = 'Scan ready'
 
@@ -77,44 +80,54 @@ export default function CommandBar() {
         <span className="ag-brand-mark" aria-hidden="true" />
       </Link>
       <span className="ag-name">AegisScan</span>
-      <label className="visually-hidden" htmlFor="ag-target">Scan target</label>
-      <input
-        id="ag-target"
-        className="ag-input ag-path"
-        value={targetPath}
-        spellCheck={false}
-        placeholder="Directory to scan"
-        onChange={(e) => setTargetPath(e.target.value)}
-      />
-      <label className="ag-check">
-        <input
-          type="checkbox"
-          checked={options.deep}
-          onChange={(e) => setOptions((o) => ({ ...o, deep: e.target.checked, staticOnly: e.target.checked ? false : o.staticOnly }))}
-        />
-        Deep
-      </label>
-      <label className="ag-check">
-        <input
-          type="checkbox"
-          checked={options.staticOnly && !options.deep}
-          onChange={(e) => setOptions((o) => ({ ...o, staticOnly: e.target.checked, deep: e.target.checked ? false : o.deep }))}
-        />
-        Static only
-      </label>
-      <label className="visually-hidden" htmlFor="ag-privacy">Privacy level</label>
-      <select
-        id="ag-privacy"
-        className="ag-input"
-        value={options.privacy}
-        onChange={(e) => setOptions((o) => ({ ...o, privacy: e.target.value }))}
-      >
-        <option value="standard">Privacy standard</option>
-        <option value="redact">Privacy redact</option>
-        <option value="strict">Privacy strict</option>
-      </select>
-      <MoreOptions />
-      <button type="button" className="ag-btn ag-btn--primary" onClick={startScan} disabled={scanning}>
+      {hosted ? (
+        <SourcePicker />
+      ) : (
+        <>
+          <label className="visually-hidden" htmlFor="ag-target">Scan target</label>
+          <input
+            id="ag-target"
+            className="ag-input ag-path"
+            value={targetPath}
+            spellCheck={false}
+            placeholder="Directory to scan"
+            onChange={(e) => setTargetPath(e.target.value)}
+          />
+        </>
+      )}
+      {showScanOptions && (
+        <>
+          <label className="ag-check">
+            <input
+              type="checkbox"
+              checked={options.deep}
+              onChange={(e) => setOptions((o) => ({ ...o, deep: e.target.checked, staticOnly: e.target.checked ? false : o.staticOnly }))}
+            />
+            Deep
+          </label>
+          <label className="ag-check">
+            <input
+              type="checkbox"
+              checked={options.staticOnly && !options.deep}
+              onChange={(e) => setOptions((o) => ({ ...o, staticOnly: e.target.checked, deep: e.target.checked ? false : o.deep }))}
+            />
+            Static only
+          </label>
+          <label className="visually-hidden" htmlFor="ag-privacy">Privacy level</label>
+          <select
+            id="ag-privacy"
+            className="ag-input"
+            value={options.privacy}
+            onChange={(e) => setOptions((o) => ({ ...o, privacy: e.target.value }))}
+          >
+            <option value="standard">Privacy standard</option>
+            <option value="redact">Privacy redact</option>
+            <option value="strict">Privacy strict</option>
+          </select>
+          {!hosted && <MoreOptions />}
+        </>
+      )}
+      <button type="button" className="ag-btn ag-btn--primary" onClick={startScan} disabled={scanning || !config}>
         {scanning ? 'Scanning' : 'Run scan'}
       </button>
       <div className="ag-cmd-end">

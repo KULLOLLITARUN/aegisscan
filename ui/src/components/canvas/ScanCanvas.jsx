@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { SEVERITY_LABEL } from '../../constants'
+import { useScan } from '../../context/ScanContext'
 import { useRaf, prefersReducedMotion } from '../../lib/useRaf'
 import Verdict from './Verdict'
 import ScanErrorBody from '../findings/ScanErrorBody'
@@ -19,6 +20,7 @@ export default function ScanCanvas({
   scene, result, scanning, error, history, historyStatus,
   selectedId, onSelect, hoverId, onHover, planeRef, visible, tilesDone, livePlane, onRun,
 }) {
+  const { hosted } = useScan()
   const stageRef = useRef(null)
   const sceneRef = useRef(null)
   const view = useRef({ offset: 0, zoom: 1, cam: { x: 0, y: 0, z: 1 }, camT: { x: 0, y: 0, z: 1 }, drag: null })
@@ -231,7 +233,11 @@ export default function ScanCanvas({
           ) : (
             <div>
               <h2>No scan yet</h2>
-              <p>Set a target in the command bar and run a scan. The floor fills in with one tile per file that has findings.</p>
+              <p>
+                {hosted
+                  ? 'Choose a folder or enter a Git URL in the command bar, then run a scan. Code is scanned with static analysis only, never kept: uploaded folders are deleted after 30 minutes and cloned repositories right after the scan.'
+                  : 'Set a target in the command bar and run a scan. The floor fills in with one tile per file that has findings.'}
+              </p>
               <button type="button" className="ag-btn ag-btn--primary" onClick={onRun}>Run scan</button>
             </div>
           )}

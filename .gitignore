@@ -41,3 +41,6 @@ node_modules/
 .aegisscan_history.db
 report*.html
 report*.sarif
+
+# ---- Hallmark design-skill working files ----
+.hallmark/

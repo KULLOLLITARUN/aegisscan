@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { SEVERITIES, SEVERITY_LABEL, normSeverity, normCategory, CATEGORY_LABEL } from '../../constants'
 import { relPath } from '../../lib/paths'
 import { sortFindings } from '../../lib/scene'
+import ScanErrorBody from '../findings/ScanErrorBody'
 
 const ROW_CAP = 300
 const SORTERS = {
@@ -45,12 +46,9 @@ export default function FindingsQueue({ result, scanning, error, selectedId, onS
   if (error) {
     return (
       <div className="ag-state err" role="alert">
-        <h3>The scan did not finish</h3>
-        <p>{error}</p>
-        <div className="ag-actions">
-          <button type="button" className="ag-btn ag-btn--primary" onClick={onRun}>Retry scan</button>
+        <ScanErrorBody error={error} onRetry={onRun}>
           <button type="button" className="ag-btn" onClick={onShowActivity}>View activity</button>
-        </div>
+        </ScanErrorBody>
       </div>
     )
   }

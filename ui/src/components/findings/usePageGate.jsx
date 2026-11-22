@@ -1,4 +1,5 @@
 import { useScan } from '../../context/ScanContext'
+import ScanErrorBody from './ScanErrorBody'
 
 /**
  * Shared loading / error / empty states for the list pages. Returns null when the scan has data,
@@ -20,9 +21,7 @@ export function usePageGate(title, needsFindings = true) {
     return (
       <div className="ag-state err" role="alert">
         <h2>{title}</h2>
-        <h3>The scan did not finish</h3>
-        <p>{scanError}</p>
-        <button type="button" className="ag-btn ag-btn--primary" onClick={startScan}>Retry scan</button>
+        <ScanErrorBody error={scanError} onRetry={startScan} />
       </div>
     )
   }

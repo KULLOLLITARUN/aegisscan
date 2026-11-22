@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { SEVERITY_LABEL } from '../../constants'
 import { useRaf, prefersReducedMotion } from '../../lib/useRaf'
 import Verdict from './Verdict'
+import ScanErrorBody from '../findings/ScanErrorBody'
 
 const BASE_ROT = -32
 const DEFAULT_HINT = 'Drag to turn the floor, scroll to zoom. Each tile is a file and each pin a finding. Taller means more confident.'
@@ -225,9 +226,7 @@ export default function ScanCanvas({
         <div className="ag-overlay">
           {error ? (
             <div role="alert">
-              <h2 style={{ color: 'var(--bad)' }}>The scan did not finish</h2>
-              <p>{error}</p>
-              <button type="button" className="ag-btn ag-btn--primary" onClick={onRun}>Retry scan</button>
+              <ScanErrorBody error={error} onRetry={onRun} as="h2" />
             </div>
           ) : (
             <div>

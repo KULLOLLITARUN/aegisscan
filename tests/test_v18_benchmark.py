@@ -178,16 +178,22 @@ def test_load_manifest_parses_fields(tmp_path: Path) -> None:
 @pytest.fixture(scope="module")
 def real_metrics():
     """Run the real static pipeline over the labelled corpus with Semgrep stubbed out
-    (it needs the network), so the numbers are deterministic."""
+    (it needs the network) and the built-in secret scanner forced (the real Gitleaks binary
+    has narrower rules, so results would depend on whether it is installed), so the numbers
+    are deterministic."""
+    import scanner.static_analysis.gitleaks_runner as gitleaks_runner
     import scanner.static_analysis.runner as tool_runner
 
     original = tool_runner.run_semgrep
+    original_find_tool = gitleaks_runner._find_tool
     tool_runner.run_semgrep = lambda *a, **k: []
+    gitleaks_runner._find_tool = lambda name: None
     try:
         runner = BenchmarkRunner(root_dir=ROOT, active_sources=STATIC_TOOLS)
         yield runner, runner.run_benchmark(static_only=True)
     finally:
         tool_runner.run_semgrep = original
+        gitleaks_runner._find_tool = original_find_tool
 
 
 def test_pipeline_meets_quality_gates(real_metrics) -> None:

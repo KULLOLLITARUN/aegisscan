@@ -1,7 +1,7 @@
 # AegisScan — Remaining Issues & Testing Guide
 
 _State as of 2026-11-23. Branch: `main` (all earlier work merged and pushed to GitHub)._
-_Test status: 604 passed, 3 skipped, coverage 93% (gate: 75%). CI (`security-scan` and `ui-build`) is green on `dffb0c3`, the first green run; every run before that failed (see the CI row in section 1)._
+_Test status: 611 passed, 3 skipped, coverage 93% (gate: 75%). CI (`security-scan` and `ui-build`) went green on `dffb0c3`, the first green run; every run before that failed (see the CI row in section 1)._
 
 ---
 
@@ -71,8 +71,8 @@ None open. (Groq keys rotated; `fix/server-hardening` merged into `main`.)
 23. **Done: LLM line numbers default to unlocated, not 1.** See the "LLM unlocated lines" row in section 1. Not measured on a live run.
 24. **Done: `rate_limit_hits` now counts Groq's internal 429 failovers.** The first live run reported 0 while the log had 43 failovers. Not re-measured on a live run.
 25. **Follow-ups noted:** `--changed-only` still runs Bandit/Semgrep/Gitleaks on the whole tree (item 15).
-26. **Real Gitleaks has lower secret recall than the built-in scanner.** Found while fixing CI: with the real binary (8.21.2) on PATH, the benchmark misses 9 labelled secrets (hardcoded JWT secrets, DB passwords, the Java/PHP/C#/TS connection-string and positional-credential cases, example AWS keys and a GitHub token in `hardcoded_jwt.js`), because its default rules are narrower. So a user with Gitleaks installed gets *fewer* secret findings than one without. The benchmark now pins the built-in scanner to stay deterministic, which hides this. Option: always run the built-in scanner too and merge (the deduplicator handles overlap). Product decision, not done.
-27. **CI is green but unproven beyond one run.** Python 3.11 / Ubuntu only. The `Run AegisScan Security Audit` step writes no `aegisscan-report.html` ("No files were found" warning), so the report artifact upload never has anything to upload. Check whether the scan step is exiting before it writes the report. Also GitHub warns that Node 20 actions (`checkout@v4`, `setup-python@v5`, `upload-artifact@v4`) are deprecated.
+26. **Done: Gitleaks and the built-in scanner now run together.** With the real binary (8.21.2) the benchmark missed 9 labelled secrets (generic JWT secrets, DB passwords, connection-string and positional credentials, example AWS keys, a GitHub token) because Gitleaks' default rules are narrower, so installing it lowered secret recall. `run_gitleaks()` now runs both and merges: every Gitleaks finding is kept, and a built-in finding is added only if no Gitleaks finding covers that file and line (both report `rule_source="gitleaks"`, which the deduplicator would not merge, so the merge happens in the runner). If the binary fails, the built-in result is used alone, as before. Checked against the real binary on `examples/`: Gitleaks 4, built-in 20, merged 21 (all 20 built-in lines plus the 1 Gitleaks-only line). `tests/test_v26_gitleaks_merge.py` (7 tests). The benchmark fixture still pins the built-in scanner so its numbers do not depend on the machine; the merged real-binary path is therefore covered by those unit tests and the `examples/` check, not by the benchmark.
+27. **Retracted: the CI report artifact is produced.** An earlier version of this item said the audit step wrote no `aegisscan-report.html`. That warning came from runs where the tests step failed and the audit step was skipped. Run 45219918655 uploaded `aegisscan-report` (3.3 KB). Still open: GitHub warns that the Node 20 actions (`checkout@v4`, `setup-python@v5`, `upload-artifact@v4`) are deprecated.
 28. **Platform-skipped tests hide Linux-only bugs.** `test_permission_error_on_directory` and `test_symlinks_are_skipped` are skipped on Windows, so they only run in CI. The dev box cannot run Linux (WSL's disk image is missing), so Linux-only failures are only visible in CI; rely on the annotations step.
 
 ---
@@ -105,6 +105,7 @@ Always use the project venv. From the project root (`D:\AI_Projects\AI-Driven_Wo
 | Dashboard route, fallback page, build reminder | `pytest tests/test_v10_server.py` |
 | Labelled benchmark, dedup regression, JSON-validity telemetry | `pytest tests/test_v18_benchmark.py tests/test_intelligence.py` |
 | LLM finding line location | `pytest tests/test_v23_llm_line_location.py` |
+| Gitleaks + built-in secret scanner merge | `pytest tests/test_v26_gitleaks_merge.py` |
 | Print the benchmark report | `python main.py --benchmark --static-only` (inside the venv) |
 
 ### Live-provider smoke tests (opt-in)

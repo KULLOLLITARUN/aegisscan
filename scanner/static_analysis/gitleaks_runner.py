@@ -73,14 +73,45 @@ _SCAN_GLOBS = (
 
 def run_gitleaks(target: Path) -> list[Finding]:
     """
-    Run Gitleaks on *target* directory and return normalized Findings.
-    If Gitleaks CLI binary is absent, falls back to built-in pure-Python secret scanner.
+    Run secret detection on *target* and return normalized Findings.
+
+    Without the Gitleaks binary, the built-in pure-Python scanner is used. With it, both run and
+    the results are merged: Gitleaks' default rules are narrower than the built-in patterns (it
+    misses generic hardcoded passwords, JWT secrets and connection-string credentials), so
+    installing Gitleaks must not lower secret recall.
     """
     gitleaks_bin = _find_tool("gitleaks")
     if gitleaks_bin is None:
         log.info("gitleaks binary absent — using built-in pure-Python secret scanner")
         return _run_python_secret_scanner(target)
 
+    real = _run_gitleaks_binary(gitleaks_bin, target)
+    builtin = _run_python_secret_scanner(target)
+    if real is None:
+        return builtin
+    return _merge_secret_findings(real, builtin)
+
+
+def _merge_secret_findings(primary: list[Finding], extra: list[Finding]) -> list[Finding]:
+    """Keep every *primary* finding and add *extra* ones that no primary finding already covers
+    (same file, line inside the primary finding's line range)."""
+    def key(path: Path) -> str:
+        try:
+            return str(path.resolve())
+        except OSError:
+            return str(path)
+
+    covered = [(key(f.file_path), f.line_start, f.line_end) for f in primary]
+    merged = list(primary)
+    for f in extra:
+        path = key(f.file_path)
+        if not any(p == path and start <= f.line_start <= end for p, start, end in covered):
+            merged.append(f)
+    return merged
+
+
+def _run_gitleaks_binary(gitleaks_bin: str, target: Path) -> list[Finding] | None:
+    """Run the Gitleaks CLI. Returns None if it could not be run or its report could not be read."""
     # Write JSON report to a temp file (gitleaks doesn't support stdout reliably)
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         report_path = Path(tmp.name)
@@ -102,14 +133,14 @@ def run_gitleaks(target: Path) -> list[Finding]:
         )
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
         log.warning("Gitleaks subprocess failed: %s", exc)
-        return _run_python_secret_scanner(target)
+        return None
 
     try:
         text = report_path.read_text(encoding="utf-8")
         report_path.unlink(missing_ok=True)
     except OSError as exc:
         log.warning("Cannot read Gitleaks report: %s", exc)
-        return _run_python_secret_scanner(target)
+        return None
 
     if not text.strip() or text.strip() == "null":
         return []

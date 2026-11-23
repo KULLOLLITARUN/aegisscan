@@ -86,6 +86,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Scan only git modified/staged/untracked files",
     )
     p.add_argument(
+        "--changed-since",
+        metavar="REF",
+        help="Like --changed-only, but also include files changed between REF (a branch, tag or commit) "
+             "and HEAD; for CI runs on a clean checkout, e.g. --changed-since origin/main",
+    )
+    p.add_argument(
         "--fail-on",
         metavar="SPEC",
         type=str,
@@ -277,6 +283,7 @@ def run(
     static_only: bool = False,
     baseline_path: Path | None = None,
     changed_only: bool = False,
+    changed_since: str | None = None,
     privacy: str = "standard",
     generate_patches: bool = False,
     progress: Callable[[str, int, str], None] | None = None,
@@ -314,7 +321,7 @@ def run(
     _progress("Discovered files", 10, f"{len(discovered_files)} files")
 
     # Incremental scan filter (V6). None = not a git repo / git unavailable -> scan everything.
-    changed: set[Path] | None = get_changed_files(path) if changed_only else None
+    changed: set[Path] | None = get_changed_files(path, changed_since) if (changed_only or changed_since) else None
     if changed is not None:
         discovered_files = [f for f in discovered_files if f.resolve() in changed]
 
@@ -529,6 +536,7 @@ def main() -> None:
         static_only=args.static_only,
         baseline_path=args.baseline,
         changed_only=args.changed_only,
+        changed_since=args.changed_since,
         privacy=args.privacy,
         generate_patches=args.generate_patches,
     )

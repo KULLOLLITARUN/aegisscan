@@ -47,13 +47,13 @@ _SECRET_PATTERNS = [
     (r"SG\.[0-9a-zA-Z._-]{20,60}", "SendGrid API Key", Severity.HIGH),
     (r"ghp_[0-9a-zA-Z]{36}", "GitHub Personal Access Token", Severity.CRITICAL),
     (r"gsk_[0-9a-zA-Z]{48}", "Groq API Key", Severity.CRITICAL),
-    (r"-----BEGIN PRIVATE KEY-----", "Unencrypted RSA/PEM Private Key", Severity.CRITICAL),
+    (r"-----BEGIN PRIVATE KEY-----", "Unencrypted RSA/PEM Private Key", Severity.CRITICAL),  # gitleaks:allow
     (r"(?i)(jwt_secret|secret_key|api_secret)\s*=\s*['\"][^'\"]{8,}['\"]", "Hardcoded Secret / JWT Key", Severity.HIGH),
     (r"(?i)(password|passwd|pwd)\s*[:=]\s*['\"][^'\"]{6,}['\"]", "Hardcoded Password String", Severity.MEDIUM),
-    # Password inside a connection string (.NET / JDBC / ODBC style): "...;Password=Abc123xyz;..."
+    # Password inside a connection string (.NET / JDBC / ODBC style): "Server=...;Password=<literal>;..."
     # The lookahead skips placeholders such as {0}, %s, $var, <secret>, @param.
     (r"(?i)\b(password|pwd)=(?![{%$<@])[^;'\"\s]{6,};", "Hardcoded Password in Connection String", Severity.MEDIUM),
-    # Positional DB credentials: mysqli("host", "user", "password", ...), mysqli_connect(...), new PDO("dsn", "user", "password")
+    # Positional DB credentials: mysqli(host, user, <literal password>, ...), mysqli_connect(...), new PDO(dsn, user, <literal password>)
     (
         r"(?i)(?:mysqli(?:_connect)?|new\s+PDO)\s*\(\s*['\"][^'\"]*['\"]\s*,\s*['\"][^'\"]*['\"]\s*,\s*['\"][^'\"]{6,}['\"]",
         "Hardcoded Database Password (positional argument)",
@@ -76,11 +76,28 @@ _SCAN_GLOBS = (
 _MAX_PER_FILE_RUNS = 25
 
 
-def run_gitleaks(target: Path, files: list[Path] | None = None) -> list[Finding]:
+def _is_excluded(path: Path, target: Path, exclude_dirs: frozenset[str]) -> bool:
+    """True if *path* sits inside a directory named in *exclude_dirs* (relative to *target*)."""
+    if not exclude_dirs:
+        return False
+    try:
+        rel = path.resolve().relative_to(target.resolve())
+    except (ValueError, OSError):
+        return False
+    return bool(exclude_dirs.intersection(rel.parts[:-1]))
+
+
+def run_gitleaks(
+    target: Path,
+    files: list[Path] | None = None,
+    exclude_dirs: frozenset[str] = frozenset(),
+) -> list[Finding]:
     """
     Run secret detection on *target* and return normalized Findings.
 
-    With *files* (``--changed-only``) only those files are checked.
+    Directories named in *exclude_dirs* (``.aegisscan.toml``) are skipped, and a line carrying a
+    ``gitleaks:allow`` comment is never reported by the built-in scanner (the real Gitleaks has
+    the same convention). With *files* (``--changed-only``) only those files are checked.
 
     Without the Gitleaks binary, the built-in pure-Python scanner is used. With it, both run and
     the results are merged: Gitleaks' default rules are narrower than the built-in patterns (it
@@ -88,17 +105,21 @@ def run_gitleaks(target: Path, files: list[Path] | None = None) -> list[Finding]
     installing Gitleaks must not lower secret recall.
     """
     gitleaks_bin = _find_tool("gitleaks")
-    if files is not None and not files:
-        return []
+    if files is not None:
+        files = [f for f in files if not _is_excluded(f, target, exclude_dirs)]
+        if not files:
+            return []
     if gitleaks_bin is None:
         log.info("gitleaks binary absent — using built-in pure-Python secret scanner")
-        return _run_python_secret_scanner(target, files)
+        return _run_python_secret_scanner(target, files, exclude_dirs)
 
     if files is None:
         real = _run_gitleaks_binary(gitleaks_bin, target)
     else:
         real = _run_gitleaks_on_files(gitleaks_bin, target, files)
-    builtin = _run_python_secret_scanner(target, files)
+    if real is not None:
+        real = [f for f in real if not _is_excluded(f.file_path, target, exclude_dirs)]
+    builtin = _run_python_secret_scanner(target, files, exclude_dirs)
     if real is None:
         return builtin
     return _merge_secret_findings(real, builtin)
@@ -195,10 +216,15 @@ def _run_gitleaks_binary(gitleaks_bin: str, target: Path) -> list[Finding] | Non
     return findings
 
 
-def _run_python_secret_scanner(target: Path, files: list[Path] | None = None) -> list[Finding]:
+def _run_python_secret_scanner(
+    target: Path,
+    files: list[Path] | None = None,
+    exclude_dirs: frozenset[str] = frozenset(),
+) -> list[Finding]:
     """Pure-Python fallback secret scanner for environments without gitleaks CLI.
 
-    With *files* only those files are read (those whose extension the scanner covers).
+    With *files* only those files are read (those whose extension the scanner covers). Files in
+    *exclude_dirs* and lines containing ``gitleaks:allow`` are skipped.
     """
     findings: list[Finding] = []
     files_to_scan: list[Path] = []
@@ -214,12 +240,16 @@ def _run_python_secret_scanner(target: Path, files: list[Path] | None = None) ->
     for filepath in files_to_scan:
         if any(ignored in str(filepath) for ignored in ("node_modules", ".git", "venv", ".venv", "dist")):
             continue
+        if _is_excluded(filepath, target, exclude_dirs):
+            continue
         try:
             content = filepath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
 
         for line_idx, line in enumerate(content.splitlines(), start=1):
+            if "gitleaks:allow" in line.lower():
+                continue
             for pattern, issue_type, severity in _SECRET_PATTERNS:
                 match = re.search(pattern, line)
                 if match:

@@ -13,12 +13,17 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 
-def get_changed_files(target_dir: Path) -> set[Path] | None:
+def get_changed_files(target_dir: Path, since: str | None = None) -> set[Path] | None:
     """
-    Get relative paths of modified, staged, or untracked files in target_dir.
+    Get the modified, staged, or untracked files in target_dir.
+
+    With *since* (a branch, tag or commit), files changed between that ref and ``HEAD`` are
+    included as well, so a CI run on a clean checkout still sees what a pull request or push changed.
+    The comparison is against the merge base (``since...HEAD``), like a pull request diff.
 
     Returns:
-        Set of resolved absolute Path objects, or None if git is not available / target is not a repo.
+        Set of resolved absolute Path objects, or None if git is not available / target is not a repo /
+        *since* is not a commit in this repository (callers then scan everything rather than nothing).
     """
     target_dir = target_dir.resolve()
 
@@ -34,6 +39,21 @@ def get_changed_files(target_dir: Path) -> set[Path] | None:
         if check.returncode != 0 or check.stdout.strip() != "true":
             log.warning("Target directory %s is not a git repository", target_dir)
             return None
+
+        if since is not None:
+            if since.startswith("-"):  # would be read as a git option, not a ref
+                log.warning("--changed-since %r is not a valid ref; scanning everything instead", since)
+                return None
+            verify = subprocess.run(
+                ["git", "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}"],
+                cwd=str(target_dir),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if verify.returncode != 0:
+                log.warning("--changed-since %r is not a known commit here; scanning everything instead", since)
+                return None
 
         changed: set[Path] = set()
 
@@ -68,6 +88,26 @@ def get_changed_files(target_dir: Path) -> set[Path] | None:
         )
         if proc_diff.returncode == 0:
             for line in proc_diff.stdout.splitlines():
+                line = line.strip()
+                if line:
+                    p = (target_dir / line).resolve()
+                    if p.exists() and p.is_file():
+                        changed.add(p)
+
+        if since is not None:
+            # --relative keeps paths relative to target_dir, which may be a subfolder of the repo.
+            proc_since = subprocess.run(
+                ["git", "diff", "--name-only", "--relative", "--diff-filter=ACMR", f"{since}...HEAD"],
+                cwd=str(target_dir),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if proc_since.returncode != 0:
+                log.warning("git diff against %r failed (%s); scanning everything instead",
+                            since, proc_since.stderr.strip()[:200])
+                return None
+            for line in proc_since.stdout.splitlines():
                 line = line.strip()
                 if line:
                     p = (target_dir / line).resolve()

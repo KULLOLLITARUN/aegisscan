@@ -181,6 +181,10 @@ def test_optimizer_analyzes_only_the_given_files(tree) -> None:
 
 
 # ----------------------------------------------------------------------------- orchestrator
+# Position of the `files` argument in each tool's signature (the exclusions come before or after it).
+_FILES_ARG = {"run_bandit": 2, "run_semgrep": 1, "run_gitleaks": 1, "run_optimizer": 2}
+
+
 def test_run_all_tools_with_nothing_to_scan_starts_no_tool(tree, monkeypatch) -> None:
     for name in ("run_bandit", "run_semgrep", "run_gitleaks", "run_optimizer"):
         monkeypatch.setattr(tool_runner, name, lambda *a, **k: pytest.fail("a tool was started"))
@@ -192,7 +196,7 @@ def test_run_all_tools_with_nothing_to_scan_starts_no_tool(tree, monkeypatch) ->
 def test_run_all_tools_hands_each_tool_the_same_scoped_files(tree, monkeypatch) -> None:
     seen: dict[str, object] = {}
     for name in ("run_bandit", "run_semgrep", "run_gitleaks", "run_optimizer"):
-        monkeypatch.setattr(tool_runner, name, lambda *a, _n=name, **k: seen.setdefault(_n, a[-1]) and [])
+        monkeypatch.setattr(tool_runner, name, lambda *a, _n=name, **k: seen.setdefault(_n, a[_FILES_ARG[_n]]) and [])
 
     tool_runner.run_all_tools(tree["root"], only_files=[tree["b"], tree["a"], tree["skipped"]])
 
@@ -202,7 +206,7 @@ def test_run_all_tools_hands_each_tool_the_same_scoped_files(tree, monkeypatch) 
 def test_run_all_tools_without_scope_passes_none(tree, monkeypatch) -> None:
     seen: dict[str, object] = {}
     for name in ("run_bandit", "run_semgrep", "run_gitleaks", "run_optimizer"):
-        monkeypatch.setattr(tool_runner, name, lambda *a, _n=name, **k: seen.setdefault(_n, ("called", a[-1])) and [])
+        monkeypatch.setattr(tool_runner, name, lambda *a, _n=name, **k: seen.setdefault(_n, ("called", a[_FILES_ARG[_n]])) and [])
     tool_runner.run_all_tools(tree["root"])
     assert all(v[1] is None for v in seen.values()) and len(seen) == 4
 
@@ -229,7 +233,7 @@ def test_changed_only_run_passes_just_the_changed_files_to_the_tools(tmp_path: P
     assert scopes == [["changed.py"], None]
 
 
-def test_exclude_dirs_apply_to_bandit_and_optimizer_only_like_a_full_scan(tmp_path: Path, monkeypatch) -> None:
+def test_exclude_dirs_apply_to_all_four_tools(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / ".aegisscan.toml").write_text('exclude_dirs = ["tests"]\n', encoding="utf-8")
     (tmp_path / "tests").mkdir()
     inside, outside = (tmp_path / "tests" / "t.py").resolve(), (tmp_path / "app.py").resolve()
@@ -237,9 +241,8 @@ def test_exclude_dirs_apply_to_bandit_and_optimizer_only_like_a_full_scan(tmp_pa
         f.write_text("x = 1\n", encoding="utf-8")
     seen: dict[str, object] = {}
     for name in ("run_bandit", "run_semgrep", "run_gitleaks", "run_optimizer"):
-        monkeypatch.setattr(tool_runner, name, lambda *a, _n=name, **k: seen.setdefault(_n, a[-1]) and [])
+        monkeypatch.setattr(tool_runner, name, lambda *a, _n=name, **k: seen.setdefault(_n, a[_FILES_ARG[_n]]) and [])
 
     tool_runner.run_all_tools(tmp_path, only_files=[inside, outside])
 
-    assert seen["run_bandit"] == seen["run_optimizer"] == [outside]
-    assert seen["run_semgrep"] == seen["run_gitleaks"] == sorted([inside, outside])
+    assert seen["run_bandit"] == seen["run_optimizer"] == seen["run_semgrep"] == seen["run_gitleaks"] == [outside]

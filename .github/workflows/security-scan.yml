@@ -51,8 +51,25 @@ jobs:
       - name: Run AegisScan Security Audit
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          python main.py . --changed-only --fail-on security:high --html aegisscan-report.html --privacy redact
+          # A CI checkout is clean, so plain --changed-only would see no changes and scan nothing.
+          # Compare with what this run adds instead: the pull request's base branch, or the commit
+          # the branch pointed at before this push.
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE="origin/$BASE_REF"
+          else
+            BASE="$BEFORE_SHA"
+          fi
+          # A new branch or a force push has no usable "before" commit; fall back to the parent
+          # commit (and if that does not exist either, main.py scans everything).
+          if ! git rev-parse --verify --quiet "${BASE}^{commit}" > /dev/null; then
+            BASE="HEAD~1"
+          fi
+          echo "Scanning files changed since $BASE"
+          python main.py . --changed-since "$BASE" --fail-on security:high --html aegisscan-report.html --privacy redact
 
       - name: Upload HTML Security Report
         if: always()

@@ -110,12 +110,18 @@ def _run_bounded(cmd: list[str], timeout_s: int) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
-def run_semgrep(target: Path, files: list[Path] | None = None) -> list[Finding]:
+def run_semgrep(
+    target: Path,
+    files: list[Path] | None = None,
+    exclude_dirs: frozenset[str] = frozenset(),
+) -> list[Finding]:
     """
     Run Semgrep on *target* and return normalized Findings.
 
-    With *files* (``--changed-only``) only those files are scanned, in as few Semgrep runs as the
-    command-line length allows. Returns [] if Semgrep is not installed or produces no output.
+    Directories named in *exclude_dirs* (``.aegisscan.toml``) are skipped. With *files*
+    (``--changed-only``) only those files are scanned, in as few Semgrep runs as the command-line
+    length allows; the caller has already dropped excluded files, since ``--exclude`` does not
+    apply to explicitly listed files. Returns [] if Semgrep is not installed or produces no output.
     """
     semgrep_bin = _find_tool("semgrep")
     if semgrep_bin is None:
@@ -139,6 +145,7 @@ def run_semgrep(target: Path, files: list[Path] | None = None) -> list[Finding]:
         # Pinning the root to the scanned folder keeps it there and also avoids creating any files.
         *(["--project-root", str(target)] if Path(target).is_dir() else []),
         "--metrics=off",
+        *(arg for d in sorted(exclude_dirs) for arg in ("--exclude", d)),
     ]
 
     if files is None:

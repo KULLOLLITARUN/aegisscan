@@ -17,7 +17,7 @@ AegisScan operates through a 10-stage hybrid analysis pipeline:
 5. **AI Fix Patch Generator**: Automatic prompt engineering for high-confidence security findings to output production-ready unified `git diff` patches (`--generate-patches`).
 6. **Intelligence Layer**: Location & category deduplication, multi-tool correlation confidence boosting, and baseline suppression (`--save-baseline FILE` / `--baseline FILE`).
 7. **Scoring & Reporting**: "Midnight Obsidian" dark-mode HTML reports with SVG score gauges, inline AI diff patches, JSON export, and rich CLI terminal summary.
-8. **CI/CD Integration**: Incremental Git diff scanning (`--changed-only`) and build gate enforcement (`--fail-on security:high`).
+8. **CI/CD Integration**: Incremental Git diff scanning (`--changed-only`, or `--changed-since REF` for a clean CI checkout) and build gate enforcement (`--fail-on security:high`).
 9. **SQLite Scan History Persistence**: Automatic recording of scan results, security score trends, and score delta tracking (`aegisscan --history`).
 10. **Interactive Web Server**: Built-in zero-dependency local dashboard web server (`aegisscan --server --port 8000`).
 
@@ -73,6 +73,9 @@ aegisscan . --static-only
 
 # Incremental scan (only git modified/staged/untracked files; the static tools read just those files)
 aegisscan . --changed-only
+
+# Same, plus everything committed since a ref (a CI checkout is clean, so --changed-only alone sees nothing)
+aegisscan . --changed-since origin/main
 
 # CI Gate (fail pipeline with exit code 2 if High/Critical security findings exist)
 aegisscan . --fail-on security:high
@@ -219,7 +222,7 @@ MIT License, free for open-source and commercial use. See [LICENSE](LICENSE).
 | `AEGISSCAN_ALLOWED_ROOTS` | environment | Extra directories the web server may scan (`;` on Windows, `:` elsewhere). Default: project root only |
 | `AEGISSCAN_ALLOW_ANY_PATH` | environment | Set to `1` to let the web server scan any directory (opt-in; off by default). Prefer `AEGISSCAN_ALLOWED_ROOTS` when you can |
 | `AEGISSCAN_MODE` | environment | `hosted` switches the web server to uploads and Git URLs behind an access token. See "Hosting it" |
-| `exclude_dirs` | `.aegisscan.toml` in the scan target | Directory names skipped by Bandit and the optimizer (tests/ and examples/ are scanned by default) |
+| `exclude_dirs` | `.aegisscan.toml` in the scan target | Directory names skipped by every static tool: Bandit, Semgrep, Gitleaks and the optimizer (tests/ and examples/ are scanned by default) |
 
 Static tools: Bandit and the built-in optimizer ship with the package; install Semgrep with `pip install ".[static]"` and Gitleaks from its [releases page](https://github.com/gitleaks/gitleaks/releases). Missing tools are skipped, never fatal.
 

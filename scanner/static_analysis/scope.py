@@ -1,4 +1,4 @@
-"""Helpers for scanning only a subset of files (``--changed-only``)."""
+"""Helpers for scanning only a subset of files (``--changed-only`` and ``--changed-since``)."""
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator

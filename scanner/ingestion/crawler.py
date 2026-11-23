@@ -70,9 +70,10 @@ class CrawlResult:
 def _load_gitignore(directory: Path) -> pathspec.PathSpec | None:
     """Parse the .gitignore in *directory* and return a PathSpec, or None."""
     gitignore = directory / ".gitignore"
-    if not gitignore.is_file():
-        return None
     try:
+        # is_file() itself raises PermissionError inside a directory we may not search
+        if not gitignore.is_file():
+            return None
         text = gitignore.read_text(encoding="utf-8", errors="replace")
         # Strip blank lines and pure-comment lines for cleaner parsing
         lines = [

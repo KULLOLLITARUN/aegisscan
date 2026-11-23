@@ -687,6 +687,7 @@ def run_server(port: int = 8000) -> None:
         sys.exit(1)
 
     is_hosted = hosted.is_hosted()
+    server_class: type[_ExclusiveHTTPServer]
     if is_hosted:
         # Render (and most hosts) tell the app which port to use via $PORT and need all interfaces.
         port = int(os.environ.get("PORT") or port)

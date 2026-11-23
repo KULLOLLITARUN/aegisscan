@@ -1,0 +1,110 @@
+# AegisScan's own Java rules for sinks the registry packs miss. The packs' taint rules only fire
+# when input visibly comes from a request object; library code that receives it through a plain
+# method parameter is exactly what these rules still flag.
+rules:
+  - id: aegis-java-runtime-exec-injection
+    languages: [java]
+    severity: ERROR
+    message: "Runtime.exec() with a non-literal command allows command injection; pass an argument array and validate input"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern: $RT.exec($CMD, ...)
+      - metavariable-regex:
+          metavariable: $RT
+          regex: ^(Runtime\.getRuntime\(\)|\w*[rR]untime\w*)$
+      - pattern-not: $RT.exec("...", ...)
+      # the array form is not parsed by a shell, so it is the recommended fix, not the problem
+      - pattern-not: $RT.exec(new String[]{...}, ...)
+      - pattern-not: $RT.exec(new String[] {...}, ...)
+
+  - id: aegis-java-shell-processbuilder-injection
+    languages: [java]
+    severity: ERROR
+    message: "A shell invoked through ProcessBuilder with a non-literal script allows command injection"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern-either:
+          - pattern: new ProcessBuilder("$SH", "$FLAG", $SCRIPT, ...)
+          - pattern: new ProcessBuilder(Arrays.asList("$SH", "$FLAG", $SCRIPT, ...))
+          - pattern: new ProcessBuilder(List.of("$SH", "$FLAG", $SCRIPT, ...))
+      - metavariable-regex:
+          metavariable: $SH
+          regex: ^(sh|bash|zsh|dash|cmd|cmd\.exe|powershell|powershell\.exe|pwsh)$
+      - metavariable-regex:
+          metavariable: $FLAG
+          regex: ^(-c|/c|/C|-Command|-command)$
+      - pattern-not: new ProcessBuilder("$SH", "$FLAG", "...", ...)
+      - pattern-not: new ProcessBuilder(Arrays.asList("$SH", "$FLAG", "...", ...))
+      - pattern-not: new ProcessBuilder(List.of("$SH", "$FLAG", "...", ...))
+
+  - id: aegis-java-xxe-chained-factory
+    languages: [java]
+    severity: ERROR
+    message: "XML parser created straight from the factory cannot have DTDs or external entities disabled (XXE)"
+    metadata: {aegis_category: injection}
+    pattern-either:
+      - pattern: DocumentBuilderFactory.newInstance().newDocumentBuilder()
+      - pattern: SAXParserFactory.newInstance().newSAXParser()
+
+  - id: aegis-java-xxe-unconfigured-factory
+    languages: [java]
+    severity: ERROR
+    message: "XML parser factory used without disabling DTDs/external entities (XXE); set disallow-doctype-decl"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern-either:
+          - pattern: |
+              DocumentBuilderFactory $F = DocumentBuilderFactory.newInstance();
+              ...
+              $F.newDocumentBuilder();
+          - pattern: |
+              SAXParserFactory $F = SAXParserFactory.newInstance();
+              ...
+              $F.newSAXParser();
+      - pattern-not-inside: |
+          $T $M(...) {
+            ...
+            $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            ...
+          }
+      - pattern-not-inside: |
+          $T $M(...) {
+            ...
+            $F.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            ...
+          }
+
+  - id: aegis-java-weak-cipher
+    languages: [java]
+    severity: WARNING
+    message: "Weak or unauthenticated cipher: DES/3DES/RC4/Blowfish, ECB mode, and a bare \"AES\" (which means AES/ECB) leak patterns or can be forged; use AES/GCM"
+    metadata: {aegis_category: crypto}
+    patterns:
+      - pattern: Cipher.getInstance($ALG, ...)
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: (?i)^"(des|desede|rc2|rc4|arcfour|blowfish|aes|des/.*|desede/.*|aes/ecb/.*|.*/ecb/.*)"$
+
+  - id: aegis-java-open-redirect-request
+    languages: [java]
+    severity: WARNING
+    message: "Redirecting to a request parameter allows open redirects; validate against an allow-list"
+    metadata: {aegis_category: redirect}
+    pattern: $RESP.sendRedirect(<... $REQ.getParameter(...) ...>)
+
+  - id: aegis-java-path-traversal-request
+    languages: [java]
+    severity: WARNING
+    message: "A request parameter reaches a filesystem path without a containment check (path traversal)"
+    metadata: {aegis_category: path_traversal}
+    patterns:
+      - pattern-either:
+          - pattern: new File(<... $REQ.getParameter(...) ...>)
+          - pattern: new File($BASE, <... $REQ.getParameter(...) ...>)
+          - pattern: new FileInputStream(<... $REQ.getParameter(...) ...>)
+          - pattern: new FileReader(<... $REQ.getParameter(...) ...>)
+          - pattern: Paths.get(<... $REQ.getParameter(...) ...>)
+          - pattern: Path.of(<... $REQ.getParameter(...) ...>)
+      # new FileInputStream(new File(..)) would report the same line twice: keep the inner File.
+      - pattern-not: new FileInputStream(new File(...))
+      - pattern-not: new FileReader(new File(...))

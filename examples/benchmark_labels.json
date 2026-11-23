@@ -200,6 +200,44 @@
       {"lines": [21, 21], "category": "redirect", "expected_by": ["semgrep", "llm"], "note": "open redirect: res.redirect(req.query.next)"},
       {"lines": [25, 25], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "reflected XSS: req.query.name concatenated into HTML"}
     ]},
+    {"path": "benchmark_multilang/java/MoreSinks.java", "labels": [
+      {"lines": [18, 18], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "ProcessBuilder sh -c with concatenated archive name"},
+      {"lines": [22, 22], "category": "redirect", "expected_by": ["semgrep", "llm"], "note": "sendRedirect with request parameter"},
+      {"lines": [26, 26], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "FileInputStream on a File built from a request parameter"},
+      {"lines": [31, 31], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "Cipher DES/ECB"},
+      {"lines": [35, 35], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "Cipher.getInstance(AES) defaults to ECB"},
+      {"lines": [39, 40], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "XXE: DocumentBuilderFactory without disabling DTDs"},
+      {"lines": [45, 45], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "XXE: SAXParserFactory chained without secure features"}
+    ]},
+    {"path": "benchmark_multilang/java/SafeMoreSinks.java", "labels": []},
+    {"path": "benchmark_multilang/go/more_sinks.go", "labels": [
+      {"lines": [14, 14], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "exec.Command bash -c with concatenated form value"},
+      {"lines": [19, 19], "category": "redirect", "expected_by": ["semgrep", "llm"], "note": "http.Redirect to a query parameter"},
+      {"lines": [24, 24], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "template.HTML of a form value bypasses escaping"},
+      {"lines": [28, 28], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "os.ReadFile(filepath.Join(dir, form value))"},
+      {"lines": [33, 33], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "os.Open with concatenated query parameter"}
+    ]},
+    {"path": "benchmark_multilang/go/safe_more_sinks.go", "labels": []},
+    {"path": "benchmark_multilang/php/more_sinks.php", "labels": [
+      {"lines": [3, 3], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "extract($_POST) overwrites variables"},
+      {"lines": [5, 5], "category": "redirect", "expected_by": ["semgrep", "llm"], "note": "header Location from $_GET"},
+      {"lines": [7, 7], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "file_get_contents with $_GET in the path"},
+      {"lines": [8, 8], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "readfile($_GET[...])"},
+      {"lines": [10, 10], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "sha1 for password hashing"},
+      {"lines": [12, 12], "category": "deserialization", "expected_by": ["semgrep", "llm"], "note": "unserialize on $_POST data"},
+      {"lines": [14, 14], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "fopen($_REQUEST[...])"}
+    ]},
+    {"path": "benchmark_multilang/php/safe_more_sinks.php", "labels": []},
+    {"path": "benchmark_multilang/csharp/MoreSinks.cs", "labels": [
+      {"lines": [18, 18], "category": "network", "expected_by": ["semgrep", "llm"], "note": "certificate validation callback always returns true"},
+      {"lines": [23, 23], "category": "network", "expected_by": ["semgrep", "llm"], "note": "HttpClientHandler accepts any server certificate"},
+      {"lines": [29, 29], "category": "crypto", "expected_by": ["semgrep", "llm"], "note": "SHA1 for password fingerprint"},
+      {"lines": [34, 34], "category": "redirect", "expected_by": ["semgrep", "llm"], "note": "Redirect(Request.Query[...])"},
+      {"lines": [39, 39], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "File.ReadAllText with concatenated query value"},
+      {"lines": [44, 44], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "HtmlString built from unencoded input"},
+      {"lines": [49, 49], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "XXE: XmlReaderSettings DtdProcessing.Parse"}
+    ]},
+    {"path": "benchmark_multilang/csharp/SafeMoreSinks.cs", "labels": []},
     {"path": "benchmark_multilang/typescript/safe_server.ts", "labels": []}
   ]
 }

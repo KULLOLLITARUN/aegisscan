@@ -1,0 +1,65 @@
+# AegisScan's own Go rules for sinks the registry packs miss. Taint rules only fire when input
+# visibly comes from a request; these also flag the shapes that are unsafe on their own.
+rules:
+  - id: aegis-go-exec-shell-injection
+    languages: [go]
+    severity: ERROR
+    message: "A shell invoked with a non-literal script allows command injection; pass arguments separately and validate input"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command("$SH", "$FLAG", $SCRIPT)
+          - pattern: exec.CommandContext($CTX, "$SH", "$FLAG", $SCRIPT)
+      - metavariable-regex:
+          metavariable: $SH
+          regex: ^(sh|bash|zsh|dash|cmd|cmd\.exe|powershell|powershell\.exe|pwsh)$
+      - metavariable-regex:
+          metavariable: $FLAG
+          regex: ^(-c|/c|/C|-Command|-command)$
+      - pattern-not: exec.Command("$SH", "$FLAG", "...")
+      - pattern-not: exec.CommandContext($CTX, "$SH", "$FLAG", "...")
+
+  - id: aegis-go-open-redirect-request
+    languages: [go]
+    severity: WARNING
+    message: "Redirecting to a request value allows open redirects; validate against an allow-list"
+    metadata: {aegis_category: redirect}
+    pattern-either:
+      - pattern: http.Redirect($W, $R, <... $REQ.URL.Query().Get(...) ...>, ...)
+      - pattern: http.Redirect($W, $R, <... $REQ.FormValue(...) ...>, ...)
+      - pattern: http.Redirect($W, $R, <... $REQ.PostFormValue(...) ...>, ...)
+
+  - id: aegis-go-template-html-xss
+    languages: [go]
+    severity: WARNING
+    message: "template.HTML/JS/URL marks a value as trusted and skips html/template escaping; a non-literal value can inject markup (XSS)"
+    metadata: {aegis_category: xss}
+    patterns:
+      - pattern-either:
+          - pattern: template.HTML($X)
+          - pattern: template.JS($X)
+          - pattern: template.HTMLAttr($X)
+          - pattern: template.URL($X)
+      - pattern-not: template.HTML("...")
+      - pattern-not: template.JS("...")
+      - pattern-not: template.HTMLAttr("...")
+      - pattern-not: template.URL("...")
+
+  - id: aegis-go-path-traversal-request
+    languages: [go]
+    severity: WARNING
+    message: "A request value reaches a filesystem path without a containment check (path traversal)"
+    metadata: {aegis_category: path_traversal}
+    pattern-either:
+      - pattern: os.ReadFile(<... $REQ.URL.Query().Get(...) ...>)
+      - pattern: os.ReadFile(<... $REQ.FormValue(...) ...>)
+      - pattern: os.Open(<... $REQ.URL.Query().Get(...) ...>)
+      - pattern: os.Open(<... $REQ.FormValue(...) ...>)
+      - pattern: os.Create(<... $REQ.URL.Query().Get(...) ...>)
+      - pattern: os.Create(<... $REQ.FormValue(...) ...>)
+      - pattern: os.Remove(<... $REQ.URL.Query().Get(...) ...>)
+      - pattern: os.Remove(<... $REQ.FormValue(...) ...>)
+      - pattern: ioutil.ReadFile(<... $REQ.URL.Query().Get(...) ...>)
+      - pattern: ioutil.ReadFile(<... $REQ.FormValue(...) ...>)
+      - pattern: http.ServeFile($W, $R, <... $REQ.URL.Query().Get(...) ...>)
+      - pattern: http.ServeFile($W, $R, <... $REQ.FormValue(...) ...>)

@@ -1,0 +1,109 @@
+# AegisScan's own C# rules for sinks the registry packs miss.
+rules:
+  - id: aegis-csharp-weak-hash
+    languages: [csharp]
+    severity: WARNING
+    message: "MD5/SHA1 are broken for security use (passwords, signatures); use SHA-256+ and a password KDF such as PBKDF2/Argon2"
+    metadata: {aegis_category: crypto}
+    pattern-either:
+      - pattern: MD5.Create()
+      - pattern: SHA1.Create()
+      - pattern: new MD5CryptoServiceProvider()
+      - pattern: new SHA1CryptoServiceProvider()
+      - pattern: new SHA1Managed()
+      - pattern: HashAlgorithm.Create("MD5")
+      - pattern: HashAlgorithm.Create("SHA1")
+      - pattern: MD5.HashData(...)
+      - pattern: SHA1.HashData(...)
+
+  - id: aegis-csharp-process-start-concatenated
+    languages: [csharp]
+    severity: ERROR
+    message: "Process.Start with an argument string built from other values allows command/argument injection; use ProcessStartInfo.ArgumentList and validate input"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern-either:
+          - pattern: Process.Start($PROG, "..." + $X)
+          - pattern: Process.Start($PROG, $X + "...")
+          - pattern: Process.Start($PROG, $"...")
+          - pattern: new ProcessStartInfo($PROG, "..." + $X)
+          - pattern: new ProcessStartInfo($PROG, $X + "...")
+          - pattern: new ProcessStartInfo($PROG, $"...")
+
+  - id: aegis-csharp-xxe-xmlurlresolver
+    languages: [csharp]
+    severity: ERROR
+    message: "XmlUrlResolver lets XML documents load external entities/resources (XXE); set XmlResolver to null"
+    metadata: {aegis_category: injection}
+    pattern-either:
+      - pattern: new XmlUrlResolver()
+
+  - id: aegis-csharp-xxe-dtd-parse
+    languages: [csharp]
+    severity: ERROR
+    message: "DtdProcessing.Parse enables DTD processing (XXE/entity expansion); use Prohibit or Ignore"
+    metadata: {aegis_category: injection}
+    pattern: DtdProcessing.Parse
+
+  - id: aegis-csharp-tls-validation-disabled
+    languages: [csharp]
+    severity: ERROR
+    message: "Certificate validation callback that always returns true disables TLS verification"
+    metadata: {aegis_category: network}
+    pattern-either:
+      - pattern: ServicePointManager.ServerCertificateValidationCallback = ($A, $B, $C, $D) => true
+      - pattern: ServicePointManager.ServerCertificateValidationCallback = delegate { return true; }
+      - pattern: ServerCertificateCustomValidationCallback = ($A, $B, $C, $D) => true
+      - pattern: $H.ServerCertificateCustomValidationCallback = ($A, $B, $C, $D) => true
+      - pattern: ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+      - pattern: $H.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+
+  - id: aegis-csharp-open-redirect-request
+    languages: [csharp]
+    severity: WARNING
+    message: "Redirecting to a request value allows open redirects; check Url.IsLocalUrl() or use LocalRedirect"
+    metadata: {aegis_category: redirect}
+    pattern-either:
+      - pattern: Redirect(<... Request.Query[...] ...>)
+      - pattern: Redirect(<... Request.QueryString[...] ...>)
+      - pattern: Redirect(<... Request.Form[...] ...>)
+      - pattern: Response.Redirect(<... Request.Query[...] ...>)
+      - pattern: Response.Redirect(<... Request.QueryString[...] ...>)
+      - pattern: Response.Redirect(<... Request.Form[...] ...>)
+
+  - id: aegis-csharp-path-traversal-request
+    languages: [csharp]
+    severity: WARNING
+    message: "A request value reaches a filesystem path without a containment check (path traversal)"
+    metadata: {aegis_category: path_traversal}
+    patterns:
+      - pattern-either:
+          - pattern: File.$M(<... Request.Query[...] ...>, ...)
+          - pattern: File.$M(<... Request.QueryString[...] ...>, ...)
+          - pattern: File.$M(<... Request.Form[...] ...>, ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(ReadAllText|ReadAllBytes|ReadAllLines|OpenRead|OpenText|Open|Delete|WriteAllText|WriteAllBytes|Copy|Move)$
+      - pattern-not: File.$M(<... Path.GetFileName(...) ...>, ...)
+
+  - id: aegis-csharp-htmlstring-xss
+    languages: [csharp]
+    severity: WARNING
+    message: "HtmlString/Html.Raw marks a value as already-safe markup; a non-literal, unencoded value can inject HTML (XSS)"
+    metadata: {aegis_category: xss}
+    patterns:
+      - pattern-either:
+          - pattern: new HtmlString($X)
+          - pattern: new Microsoft.AspNetCore.Html.HtmlString($X)
+          - pattern: Html.Raw($X)
+      - pattern-not: new HtmlString("...")
+      - pattern-not: new Microsoft.AspNetCore.Html.HtmlString("...")
+      - pattern-not: Html.Raw("...")
+      - pattern-not: new HtmlString(<... $E.Encode(...) ...>)
+      - pattern-not: new HtmlString(<... WebUtility.HtmlEncode(...) ...>)
+      - pattern-not: new HtmlString(<... HttpUtility.HtmlEncode(...) ...>)
+      - pattern-not: new HtmlString(<... $E.HtmlEncode(...) ...>)
+      - pattern-not: Html.Raw(<... $E.Encode(...) ...>)
+      - pattern-not: Html.Raw(<... WebUtility.HtmlEncode(...) ...>)
+      - pattern-not: Html.Raw(<... HttpUtility.HtmlEncode(...) ...>)
+      - pattern-not: Html.Raw(<... $E.HtmlEncode(...) ...>)

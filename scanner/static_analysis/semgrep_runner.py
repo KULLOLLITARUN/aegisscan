@@ -58,7 +58,10 @@ _SEMGREP_CONFIDENCE: dict[str, float] = {
 _SEMGREP_CONFIGS = ["p/python", "p/javascript", "p/owasp-top-ten", "p/security-audit", "p/nodejsscan"]
 
 #: AegisScan's own rules (bundled with the package); they run offline alongside the registry packs.
-_LOCAL_RULES = Path(__file__).parent / "rules" / "js_security.yml"
+_RULES_DIR = Path(__file__).parent / "rules"
+_LOCAL_RULES = _RULES_DIR / "js_security.yml"
+# AegisScan's own rules, one file per language (js, java, go, php, csharp), loaded next to the registry packs.
+_LOCAL_RULE_FILES = tuple(sorted(_RULES_DIR.glob("*_security.yml")))
 
 
 def _infer_category(rule_id: str) -> str:
@@ -131,8 +134,8 @@ def run_semgrep(
     config_flags = []
     for cfg in _SEMGREP_CONFIGS:
         config_flags += ["--config", cfg]
-    if _LOCAL_RULES.is_file():
-        config_flags += ["--config", str(_LOCAL_RULES)]
+    for rule_file in _LOCAL_RULE_FILES:
+        config_flags += ["--config", str(rule_file)]
 
     base = [
         semgrep_bin, "scan",

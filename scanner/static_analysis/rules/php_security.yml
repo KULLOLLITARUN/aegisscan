@@ -1,0 +1,97 @@
+# AegisScan's own PHP rules. The registry PHP pack is not loaded (it added download time and no
+# measured gain), so the high-signal superglobal sinks are covered here.
+rules:
+  - id: aegis-php-include-request
+    languages: [php]
+    severity: ERROR
+    message: "include/require of a path built from request data allows local/remote file inclusion; use an allow-list"
+    metadata: {aegis_category: path_traversal}
+    pattern-either:
+      - pattern: include(<... $_GET[...] ...>)
+      - pattern: include(<... $_POST[...] ...>)
+      - pattern: include(<... $_REQUEST[...] ...>)
+      - pattern: include(<... $_COOKIE[...] ...>)
+      - pattern: include_once(<... $_GET[...] ...>)
+      - pattern: include_once(<... $_POST[...] ...>)
+      - pattern: include_once(<... $_REQUEST[...] ...>)
+      - pattern: require(<... $_GET[...] ...>)
+      - pattern: require(<... $_POST[...] ...>)
+      - pattern: require(<... $_REQUEST[...] ...>)
+      - pattern: require_once(<... $_GET[...] ...>)
+      - pattern: require_once(<... $_POST[...] ...>)
+      - pattern: require_once(<... $_REQUEST[...] ...>)
+
+  - id: aegis-php-unserialize-request
+    languages: [php]
+    severity: ERROR
+    message: "unserialize() of request data allows object injection and code execution; use json_decode or allowed_classes"
+    metadata: {aegis_category: deserialization}
+    pattern-either:
+      - pattern: unserialize(<... $_GET[...] ...>)
+      - pattern: unserialize(<... $_POST[...] ...>)
+      - pattern: unserialize(<... $_REQUEST[...] ...>)
+      - pattern: unserialize(<... $_COOKIE[...] ...>)
+
+  - id: aegis-php-eval-nonliteral
+    languages: [php]
+    severity: ERROR
+    message: "eval() of a non-literal value allows arbitrary code execution"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern: eval($X)
+      - pattern-not: eval("...")
+
+  - id: aegis-php-extract-request
+    languages: [php]
+    severity: ERROR
+    message: "extract() of request data lets callers overwrite any variable (variable injection)"
+    metadata: {aegis_category: injection}
+    pattern-either:
+      - pattern: extract($_GET, ...)
+      - pattern: extract($_POST, ...)
+      - pattern: extract($_REQUEST, ...)
+      - pattern: extract($_COOKIE, ...)
+
+  - id: aegis-php-weak-password-hash
+    languages: [php]
+    severity: WARNING
+    message: "md5()/sha1() of a password is fast to brute force and unsalted; use password_hash()"
+    metadata: {aegis_category: crypto}
+    patterns:
+      - pattern-either:
+          - pattern: md5($X, ...)
+          - pattern: sha1($X, ...)
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(passw|pwd|passphrase).*
+
+  - id: aegis-php-open-redirect-request
+    languages: [php]
+    severity: WARNING
+    message: "Redirecting to a request value allows open redirects; validate against an allow-list"
+    metadata: {aegis_category: redirect}
+    pattern-either:
+      - pattern: 'header("Location: " . <... $_GET[...] ...>)'
+      - pattern: 'header("Location: " . <... $_POST[...] ...>)'
+      - pattern: 'header("Location: " . <... $_REQUEST[...] ...>)'
+
+  - id: aegis-php-path-traversal-request
+    languages: [php]
+    severity: WARNING
+    message: "A request value reaches a filesystem path without a containment check (path traversal)"
+    metadata: {aegis_category: path_traversal}
+    patterns:
+      - pattern-either:
+          - pattern: $FN(<... $_GET[...] ...>, ...)
+          - pattern: $FN(<... $_POST[...] ...>, ...)
+          - pattern: $FN(<... $_REQUEST[...] ...>, ...)
+      - metavariable-regex:
+          metavariable: $FN
+          regex: ^(file_get_contents|file_put_contents|readfile|fopen|file|unlink|copy|rename|mkdir|rmdir|touch|is_file|file_exists|highlight_file|show_source)$
+      # a basename()/realpath() wrapper around the request value is the usual guard
+      - pattern-not: $FN(<... basename(<... $_GET[...] ...>) ...>, ...)
+      - pattern-not: $FN(<... basename(<... $_POST[...] ...>) ...>, ...)
+      - pattern-not: $FN(<... basename(<... $_REQUEST[...] ...>) ...>, ...)
+      - pattern-not: $FN(<... realpath(<... $_GET[...] ...>) ...>, ...)
+      - pattern-not: $FN(<... realpath(<... $_POST[...] ...>) ...>, ...)
+      - pattern-not: $FN(<... realpath(<... $_REQUEST[...] ...>) ...>, ...)

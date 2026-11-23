@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from scanner.models.finding import Finding, Severity
+from scanner.static_analysis.scope import batches
 
 log = logging.getLogger(__name__)
 
@@ -72,27 +73,52 @@ def _infer_category(test_id: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def run_bandit(target: Path, exclude_dirs: frozenset[str] = frozenset()) -> list[Finding]:
+def run_bandit(
+    target: Path,
+    exclude_dirs: frozenset[str] = frozenset(),
+    files: list[Path] | None = None,
+) -> list[Finding]:
     """
     Run Bandit on *target* directory and return a normalized list of Findings.
 
-    Returns [] if Bandit is not installed, produces no findings, or errors out.
-    Errors are logged as warnings — the scanner continues without Bandit output.
+    With *files* (``--changed-only``) only the ``.py`` files in that list are scanned; the caller
+    has already applied the directory exclusions. Returns [] if Bandit is not installed, produces
+    no findings, or errors out. Errors are logged as warnings — the scanner continues without
+    Bandit output.
     """
     bandit_cmd = _find_bandit()
     if bandit_cmd is None:
         log.warning("Bandit not found on PATH or in venv — skipping")
         return []
 
+    base = [bandit_cmd, "-f", "json", "-q", "--exit-zero",
+            "--skip", "B101"]  # B101 assert-used is noise in test files
+
+    if files is not None:
+        py_files = [f for f in files if f.suffix.lower() == ".py"]
+        if not py_files:
+            return []
+        findings: list[Finding] = []
+        for batch in batches(py_files, fixed_len=sum(len(a) + 1 for a in base)):
+            findings.extend(_run_once([*base, *batch], target))
+        log.info("Bandit: %d findings in %d changed file(s)", len(findings), len(py_files))
+        return findings
+
     # tests/ and examples/ are scanned by default; opt out via .aegisscan.toml.
     _EXCLUDE_DIRS = [".venv", "venv", "node_modules", "__pycache__", "dist", ".git", "build", *sorted(exclude_dirs)]
     exclude_str = ",".join(
         str(target / d) for d in _EXCLUDE_DIRS if (target / d).exists()
     )
-    cmd = [bandit_cmd, "-r", str(target), "-f", "json", "-q", "--exit-zero",
-           "--skip", "B101"]  # B101 assert-used is noise in test files
+    cmd = [*base, "-r", str(target)]
     if exclude_str:
         cmd += ["--exclude", exclude_str]
+    findings = _run_once(cmd, target)
+    log.info("Bandit: %d findings in %s", len(findings), target)
+    return findings
+
+
+def _run_once(cmd: list[str], target: Path) -> list[Finding]:
+    """Run one Bandit command line and normalise its JSON output."""
     try:
         proc = subprocess.run(
             cmd,
@@ -120,8 +146,6 @@ def run_bandit(target: Path, exclude_dirs: frozenset[str] = frozenset()) -> list
             findings.append(_normalize(item, target))
         except Exception as exc:
             log.debug("Failed to normalize Bandit result: %s — %s", item, exc)
-
-    log.info("Bandit: %d findings in %s", len(findings), target)
     return findings
 
 

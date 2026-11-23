@@ -31,11 +31,22 @@ def _finding_in(path: Path) -> Finding:
     )
 
 
-@pytest.fixture
-def fake_tools(monkeypatch):
-    """Static tools that flag every .py file under the target, like Bandit does for the whole tree."""
-    def run_all_tools(target: Path, progress=None):
-        return [_finding_in(p) for p in sorted(target.rglob("*.py"))], ["fake"]
+@pytest.fixture(params=["tools_honour_scope", "tools_ignore_scope"])
+def fake_tools(request, monkeypatch):
+    """Static tools that flag every .py file they are given, like Bandit does.
+
+    "tools_honour_scope" reads only ``only_files`` (what the real tools do); "tools_ignore_scope"
+    scans the whole tree regardless, so the safety-net filter in main.run is still exercised.
+    The results must be identical either way.
+    """
+    honour = request.param == "tools_honour_scope"
+
+    def run_all_tools(target: Path, progress=None, only_files=None):
+        if honour and only_files is not None:
+            paths = sorted(Path(f) for f in only_files if str(f).endswith(".py"))
+        else:
+            paths = sorted(target.rglob("*.py"))
+        return [_finding_in(p) for p in paths], ["fake"]
     monkeypatch.setattr(main, "run_all_tools", run_all_tools)
 
 

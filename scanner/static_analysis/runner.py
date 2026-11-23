@@ -12,7 +12,7 @@ Design rules (plan §2):
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from scanner.config import load_config
@@ -20,17 +20,25 @@ from scanner.models.finding import Finding
 from scanner.static_analysis.bandit_runner import run_bandit
 from scanner.static_analysis.gitleaks_runner import run_gitleaks
 from scanner.static_analysis.optimization_runner import run_optimizer
+from scanner.static_analysis.scope import within
 from scanner.static_analysis.semgrep_runner import run_semgrep
 
 log = logging.getLogger(__name__)
+
+# Directories no tool should look into (the tools' own defaults, applied to explicit file lists too).
+_ALWAYS_SKIP = {".venv", "venv", "node_modules", "__pycache__", "dist", ".git", "build", "site-packages"}
 
 
 def run_all_tools(
     target: Path,
     progress: Callable[[str], None] | None = None,
+    only_files: Iterable[Path] | None = None,
 ) -> tuple[list[Finding], list[str]]:
     """
     Run all configured static analysis tools against *target*.
+
+    *only_files* (``--changed-only``) limits every tool to those files instead of the whole tree;
+    an empty collection means there is nothing to scan and no tool is started.
 
     Returns:
         findings    : Combined list[Finding] from all tools that ran.
@@ -46,8 +54,22 @@ def run_all_tools(
 
     # --- Bandit (Python SAST, always available via pip) ---
     config = load_config(target)
+    # Scoped scans must give the same results as a full scan, only faster. A full scan applies
+    # .aegisscan.toml's exclude_dirs to Bandit and the optimizer but not to Semgrep or Gitleaks,
+    # so the file lists differ the same way.
+    files: list[Path] | None = None          # for Semgrep and Gitleaks
+    configured_files: list[Path] | None = None       # for Bandit and the optimizer (exclude_dirs applied)
+    if only_files is not None:
+        target = target.resolve()
+        resolved = [Path(f).resolve() for f in only_files]
+        files = within(target, resolved, _ALWAYS_SKIP)
+        configured_files = within(target, resolved, _ALWAYS_SKIP | set(config.exclude_dirs))
+        if not files:
+            log.info("No changed files to scan; skipping static analysis")
+            return [], []
+
     _step("Bandit")
-    bandit_findings = run_bandit(target, config.exclude_dirs)
+    bandit_findings = run_bandit(target, config.exclude_dirs, configured_files)
     if bandit_findings:
         all_findings.extend(bandit_findings)
         tools_run.append("bandit")
@@ -56,7 +78,7 @@ def run_all_tools(
 
     # --- Semgrep (optional CLI) ---
     _step("Semgrep")
-    semgrep_findings = run_semgrep(target)
+    semgrep_findings = run_semgrep(target, files)
     if semgrep_findings:
         all_findings.extend(semgrep_findings)
         tools_run.append("semgrep")
@@ -65,7 +87,7 @@ def run_all_tools(
 
     # --- Gitleaks (optional CLI) ---
     _step("Gitleaks")
-    gitleaks_findings = run_gitleaks(target)
+    gitleaks_findings = run_gitleaks(target, files)
     if gitleaks_findings:
         all_findings.extend(gitleaks_findings)
         tools_run.append("gitleaks")
@@ -74,7 +96,7 @@ def run_all_tools(
 
     # --- Optimizer (pure-Python AST checks, always available) ---
     _step("Optimizer")
-    opt_findings = run_optimizer(target, set(config.exclude_dirs))
+    opt_findings = run_optimizer(target, set(config.exclude_dirs), configured_files)
     if opt_findings:
         all_findings.extend(opt_findings)
         tools_run.append("aegis-optimizer")

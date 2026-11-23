@@ -71,7 +71,7 @@ aegisscan --history
 # Static analysis only (offline mode, no API dependencies)
 aegisscan . --static-only
 
-# Incremental scan (only git modified/staged/untracked files)
+# Incremental scan (only git modified/staged/untracked files; the static tools read just those files)
 aegisscan . --changed-only
 
 # CI Gate (fail pipeline with exit code 2 if High/Critical security findings exist)

@@ -346,10 +346,13 @@ def run(
     static_findings, tools_run = run_all_tools(
         path.resolve(),
         progress=lambda tool: _progress("Static analysis", 30, tool),
+        # --changed-only: the tools read just the changed files (discovered_files was already cut
+        # down to them above) instead of the whole tree. None = scan everything.
+        only_files=discovered_files if changed is not None else None,
     )
     if changed is not None:
-        # The tools scan the whole tree, so drop findings in files that did not change; otherwise
-        # --changed-only reports (and a CI gate fails on) every pre-existing issue in the repo.
+        # Safety net: a tool must never blame a change for issues in files that did not change,
+        # otherwise a CI gate would fail on every pre-existing issue in the repo.
         static_findings = [f for f in static_findings if f.file_path.resolve() in changed]
 
     # ---- 5. LLM reasoning ----

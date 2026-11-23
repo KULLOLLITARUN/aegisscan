@@ -71,9 +71,16 @@ _SCAN_GLOBS = (
 )
 
 
-def run_gitleaks(target: Path) -> list[Finding]:
+# Gitleaks scans one path per run. For a handful of changed files that is cheaper than the whole
+# tree; above this many files one tree-wide run (filtered afterwards) is cheaper than many runs.
+_MAX_PER_FILE_RUNS = 25
+
+
+def run_gitleaks(target: Path, files: list[Path] | None = None) -> list[Finding]:
     """
     Run secret detection on *target* and return normalized Findings.
+
+    With *files* (``--changed-only``) only those files are checked.
 
     Without the Gitleaks binary, the built-in pure-Python scanner is used. With it, both run and
     the results are merged: Gitleaks' default rules are narrower than the built-in patterns (it
@@ -81,15 +88,38 @@ def run_gitleaks(target: Path) -> list[Finding]:
     installing Gitleaks must not lower secret recall.
     """
     gitleaks_bin = _find_tool("gitleaks")
+    if files is not None and not files:
+        return []
     if gitleaks_bin is None:
         log.info("gitleaks binary absent — using built-in pure-Python secret scanner")
-        return _run_python_secret_scanner(target)
+        return _run_python_secret_scanner(target, files)
 
-    real = _run_gitleaks_binary(gitleaks_bin, target)
-    builtin = _run_python_secret_scanner(target)
+    if files is None:
+        real = _run_gitleaks_binary(gitleaks_bin, target)
+    else:
+        real = _run_gitleaks_on_files(gitleaks_bin, target, files)
+    builtin = _run_python_secret_scanner(target, files)
     if real is None:
         return builtin
     return _merge_secret_findings(real, builtin)
+
+
+def _run_gitleaks_on_files(gitleaks_bin: str, target: Path, files: list[Path]) -> list[Finding] | None:
+    """Gitleaks findings for just *files*; None if the binary could not be used at all."""
+    if len(files) <= _MAX_PER_FILE_RUNS:
+        found: list[Finding] = []
+        ran = False
+        for f in files:
+            result = _run_gitleaks_binary(gitleaks_bin, f)
+            if result is not None:
+                ran = True
+                found.extend(result)
+        return found if ran else None
+    tree = _run_gitleaks_binary(gitleaks_bin, target)
+    if tree is None:
+        return None
+    wanted = {f.resolve() for f in files}
+    return [f for f in tree if f.file_path.resolve() in wanted]
 
 
 def _merge_secret_findings(primary: list[Finding], extra: list[Finding]) -> list[Finding]:
@@ -165,12 +195,17 @@ def _run_gitleaks_binary(gitleaks_bin: str, target: Path) -> list[Finding] | Non
     return findings
 
 
-def _run_python_secret_scanner(target: Path) -> list[Finding]:
-    """Pure-Python fallback secret scanner for environments without gitleaks CLI."""
+def _run_python_secret_scanner(target: Path, files: list[Path] | None = None) -> list[Finding]:
+    """Pure-Python fallback secret scanner for environments without gitleaks CLI.
+
+    With *files* only those files are read (those whose extension the scanner covers).
+    """
     findings: list[Finding] = []
     files_to_scan: list[Path] = []
 
-    if target.is_file():
+    if files is not None:
+        files_to_scan = [f for f in files if any(f.match(g) for g in _SCAN_GLOBS)]
+    elif target.is_file():
         files_to_scan.append(target)
     elif target.is_dir():
         for ext in _SCAN_GLOBS:

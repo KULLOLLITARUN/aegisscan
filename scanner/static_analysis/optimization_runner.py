@@ -315,13 +315,17 @@ def analyze_file(path: Path) -> list[Finding]:
     return visitor.findings
 
 
-def run_optimizer(target: Path, exclude_dirs: set[str] | None = None) -> list[Finding]:
-    """Analyze every Python and JS/TS file under *target*; never raises."""
+def run_optimizer(
+    target: Path,
+    exclude_dirs: set[str] | None = None,
+    files: list[Path] | None = None,
+) -> list[Finding]:
+    """Analyze every Python and JS/TS file under *target* (or only *files*, for ``--changed-only``); never raises."""
     from scanner.static_analysis.optimization_js import JS_EXTENSIONS, analyze_js_file  # noqa: PLC0415
 
     skip = _SKIP_DIRS | (exclude_dirs or set())
     findings: list[Finding] = []
-    for path in sorted(target.rglob("*")):
+    for path in sorted(target.rglob("*")) if files is None else sorted(files):
         suffix = path.suffix.lower()
         is_py = suffix == ".py"
         is_js = suffix in JS_EXTENSIONS and not path.name.lower().endswith((".min.js", ".d.ts"))

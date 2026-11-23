@@ -15,7 +15,7 @@ from tests.test_v13_coverage import _events, _fake_result
 
 def _fast_tools(monkeypatch) -> None:
     """Replace run_all_tools with a stub that still reports per-tool progress."""
-    def fake(target, progress=None):
+    def fake(target, progress=None, only_files=None):
         for name in ("Bandit", "Semgrep"):
             if progress:
                 progress(name)

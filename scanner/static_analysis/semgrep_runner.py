@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 from scanner.models.finding import Finding, Severity
+from scanner.static_analysis.scope import batches
 
 log = logging.getLogger(__name__)
 
@@ -109,10 +110,12 @@ def _run_bounded(cmd: list[str], timeout_s: int) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
-def run_semgrep(target: Path) -> list[Finding]:
+def run_semgrep(target: Path, files: list[Path] | None = None) -> list[Finding]:
     """
     Run Semgrep on *target* and return normalized Findings.
-    Returns [] if Semgrep is not installed or produces no output.
+
+    With *files* (``--changed-only``) only those files are scanned, in as few Semgrep runs as the
+    command-line length allows. Returns [] if Semgrep is not installed or produces no output.
     """
     semgrep_bin = _find_tool("semgrep")
     if semgrep_bin is None:
@@ -125,7 +128,7 @@ def run_semgrep(target: Path) -> list[Finding]:
     if _LOCAL_RULES.is_file():
         config_flags += ["--config", str(_LOCAL_RULES)]
 
-    cmd = [
+    base = [
         semgrep_bin, "scan",
         *config_flags,
         "--json",
@@ -136,9 +139,22 @@ def run_semgrep(target: Path) -> list[Finding]:
         # Pinning the root to the scanned folder keeps it there and also avoids creating any files.
         *(["--project-root", str(target)] if Path(target).is_dir() else []),
         "--metrics=off",
-        str(target),
     ]
 
+    if files is None:
+        findings = _run_semgrep_once([*base, str(target)])
+    else:
+        if not files:
+            return []
+        findings = []
+        for batch in batches(files, fixed_len=sum(len(a) + 1 for a in base)):
+            findings.extend(_run_semgrep_once([*base, *batch]))
+    log.info("Semgrep: %d findings in %s", len(findings), target)
+    return findings
+
+
+def _run_semgrep_once(cmd: list[str]) -> list[Finding]:
+    """Run one Semgrep command line and normalise its JSON output."""
     timeout_s = _semgrep_timeout()
     try:
         proc = _run_bounded(cmd, timeout_s)
@@ -182,7 +198,6 @@ def run_semgrep(target: Path) -> list[Finding]:
         except Exception as exc:
             log.debug("Failed to normalize Semgrep result: %s — %s", item, exc)
 
-    log.info("Semgrep: %d findings in %s", len(findings), target)
     return findings
 
 

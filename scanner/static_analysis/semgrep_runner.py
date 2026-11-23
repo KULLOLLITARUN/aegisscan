@@ -167,7 +167,16 @@ def run_semgrep(target: Path) -> list[Finding]:
             log.warning("Semgrep error (exit %d): %s", proc.returncode, str(err.get("message", ""))[:200])
 
     findings: list[Finding] = []
+    seen: set[tuple] = set()
     for item in data.get("results", []):
+        # Semgrep can report one match several times (seen with `$X.$M($ARG, ...)` rules); the
+        # deduplicator never merges two findings from the same source, so drop exact repeats here.
+        start, end = item.get("start", {}), item.get("end", {})
+        key = (item.get("check_id"), item.get("path"),
+               start.get("line"), start.get("col"), end.get("line"), end.get("col"))
+        if key in seen:
+            continue
+        seen.add(key)
         try:
             findings.append(_normalize(item))
         except Exception as exc:

@@ -133,6 +133,18 @@
     {"path": "benchmark_corpus/safe_config.py", "labels": []},
     {"path": "tricky_clean_python/ok.py", "labels": []},
     {"path": "tricky_clean_js/ok.js", "labels": []},
+    {"path": "tricky_clean_js/safe_sinks.js", "labels": []},
+    {"path": "vulnerable_js/more_sinks.js", "labels": [
+      {"lines": [20, 20], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "insertAdjacentHTML with comment body"},
+      {"lines": [26, 26], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "jQuery .html() with user bio"},
+      {"lines": [32, 32], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "React dangerouslySetInnerHTML with post content"},
+      {"lines": [38, 38], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "setInterval with an interpolated code string"},
+      {"lines": [44, 44], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "SQLi: concatenated req.query.id in mysql query"},
+      {"lines": [50, 50], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "SQLi: template literal with req.params.id"},
+      {"lines": [56, 56], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "res.sendFile(req.params.file) without root"},
+      {"lines": [62, 62], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "fs.readFile(path.join(dir, req.query.name))"},
+      {"lines": [68, 68], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "createReadStream with concatenated req.params.name"}
+    ]},
     {"path": "clean_project/app.py", "labels": []},
     {"path": "clean_project/auth.py", "labels": []},
     {"path": "clean_python/config_loader.py", "labels": []},

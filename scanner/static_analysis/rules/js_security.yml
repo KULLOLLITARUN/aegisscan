@@ -51,6 +51,10 @@ rules:
           - pattern: document.writeln($X)
       - pattern-not: document.write("...")
       - pattern-not: document.writeln("...")
+      # Output already passed through a sanitiser/escaper is not flagged.
+      - pattern-not: document.write($O.sanitize(...))
+      - pattern-not: document.write(sanitizeHtml(...))
+      - pattern-not: document.write(escapeHtml(...))
 
   - id: aegis-js-innerhtml-xss
     languages: [javascript, typescript]
@@ -63,6 +67,21 @@ rules:
           - pattern: $EL.outerHTML = $X
       - pattern-not: $EL.innerHTML = "..."
       - pattern-not: $EL.outerHTML = "..."
+      # Output already passed through a sanitiser/escaper is not flagged.
+      - pattern-not: $EL.innerHTML = $O.sanitize(...)
+      - pattern-not: $EL.innerHTML = sanitizeHtml(...)
+      - pattern-not: $EL.innerHTML = sanitize(...)
+      - pattern-not: $EL.innerHTML = escapeHtml(...)
+      - pattern-not: $EL.innerHTML = $O.escape(...)
+      - pattern-not: $EL.innerHTML = xss(...)
+      - pattern-not: $EL.innerHTML = filterXSS(...)
+      - pattern-not: $EL.outerHTML = $O.sanitize(...)
+      - pattern-not: $EL.outerHTML = sanitizeHtml(...)
+      - pattern-not: $EL.outerHTML = sanitize(...)
+      - pattern-not: $EL.outerHTML = escapeHtml(...)
+      - pattern-not: $EL.outerHTML = $O.escape(...)
+      - pattern-not: $EL.outerHTML = xss(...)
+      - pattern-not: $EL.outerHTML = filterXSS(...)
 
   - id: aegis-js-path-traversal-join
     languages: [javascript, typescript]
@@ -76,3 +95,99 @@ rules:
         ...
         $FS.$READ($P, ...);
       }
+
+  - id: aegis-js-insertadjacenthtml-xss
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "insertAdjacentHTML() with a non-literal value can inject unsanitised HTML (XSS)"
+    metadata: {aegis_category: xss}
+    patterns:
+      - pattern: $EL.insertAdjacentHTML($POS, $X)
+      - pattern-not: $EL.insertAdjacentHTML($POS, "...")
+      - pattern-not: $EL.insertAdjacentHTML($POS, $O.sanitize(...))
+      - pattern-not: $EL.insertAdjacentHTML($POS, sanitizeHtml(...))
+      - pattern-not: $EL.insertAdjacentHTML($POS, escapeHtml(...))
+
+  - id: aegis-js-jquery-html-xss
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "jQuery .html() with a non-literal value can inject unsanitised HTML (XSS); use .text() or sanitise first"
+    metadata: {aegis_category: xss}
+    patterns:
+      - pattern-either:
+          - pattern: $(...).html($X)
+          - pattern: jQuery(...).html($X)
+      - pattern-not: $(...).html("...")
+      - pattern-not: jQuery(...).html("...")
+      - pattern-not: $(...).html($O.sanitize(...))
+      - pattern-not: $(...).html(sanitizeHtml(...))
+      - pattern-not: $(...).html(escapeHtml(...))
+
+  - id: aegis-js-react-dangerouslysetinnerhtml-xss
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "dangerouslySetInnerHTML with a non-literal value can inject unsanitised HTML (XSS); sanitise it first"
+    metadata: {aegis_category: xss}
+    patterns:
+      - pattern: '<$C ... dangerouslySetInnerHTML={{__html: $X}} ... />'
+      - pattern-not: '<$C ... dangerouslySetInnerHTML={{__html: "..."}} ... />'
+      - pattern-not: '<$C ... dangerouslySetInnerHTML={{__html: $O.sanitize(...)}} ... />'
+      - pattern-not: '<$C ... dangerouslySetInnerHTML={{__html: sanitizeHtml(...)}} ... />'
+
+  # A timer given a string runs it like eval(). A bare identifier may well be a function, so only
+  # an interpolated/concatenated string, or an identifier whose name says it holds code, is flagged.
+  - id: aegis-js-timer-code-string
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "setTimeout/setInterval given a string (or a value named like code) evaluates it like eval()"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern-either:
+          - pattern: $T("..." + $X, ...)
+          - pattern: $T($X + "...", ...)
+          - pattern: $T(`...${$X}...`, ...)
+          - patterns:
+              - pattern: $T($CODE, ...)
+              - metavariable-regex:
+                  metavariable: $CODE
+                  regex: (?i)^[\w.]*(code|script|expr|expression|snippet|payload)\w*$
+      - metavariable-regex:
+          metavariable: $T
+          regex: ^(setTimeout|setInterval|window\.setTimeout|window\.setInterval)$
+
+  # SQL assembled from a template literal or string concatenation instead of placeholders.
+  - id: aegis-js-sql-string-building
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "SQL built by string concatenation/interpolation is injectable; use placeholders (?, $1) and pass values separately"
+    metadata: {aegis_category: injection}
+    patterns:
+      - pattern: $DB.$M($ARG, ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(query|execute|raw|all|get|run|each|exec)$
+      - metavariable-regex:
+          metavariable: $ARG
+          regex: (?is)^\s*[`"']\s*(select|insert|update|delete|drop|create|alter|with|merge|replace)\b.*(\$\{|["'`]\s*\+|\+\s*["'`])
+
+  # Express/fs calls that take a path straight from the request (no root/containment check).
+  - id: aegis-js-path-traversal-request
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "A request value reaches a filesystem path without a containment check (path traversal)"
+    metadata: {aegis_category: path_traversal}
+    patterns:
+      - pattern-either:
+          - pattern: $RES.sendFile(<... $REQ.$P.$K ...>)
+          - pattern: $RES.download(<... $REQ.$P.$K ...>)
+          - pattern: $FS.readFile(<... $REQ.$P.$K ...>, ...)
+          - pattern: $FS.readFileSync(<... $REQ.$P.$K ...>, ...)
+          - pattern: $FS.createReadStream(<... $REQ.$P.$K ...>, ...)
+          - pattern: $FS.writeFile(<... $REQ.$P.$K ...>, ...)
+          - pattern: $FS.unlink(<... $REQ.$P.$K ...>, ...)
+      - metavariable-regex:
+          metavariable: $REQ
+          regex: ^(req|request|ctx\.request)$
+      - metavariable-regex:
+          metavariable: $P
+          regex: ^(params|query|body)$

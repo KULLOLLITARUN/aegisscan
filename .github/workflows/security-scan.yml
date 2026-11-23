@@ -69,7 +69,37 @@ jobs:
             BASE="HEAD~1"
           fi
           echo "Scanning files changed since $BASE"
-          python main.py . --changed-since "$BASE" --fail-on security:high --html aegisscan-report.html --privacy redact
+          echo "AUDIT_BASE=$BASE" >> "$GITHUB_ENV"
+          # Keep the console output for the summary below, outside the checkout so it is not itself scanned
+          # as a changed file; pipefail keeps the gate's exit code (2).
+          set -o pipefail
+          python main.py . --changed-since "$BASE" --fail-on security:high --html aegisscan-report.html --privacy redact 2>&1 | tee "$RUNNER_TEMP/audit.log"
+
+      - name: Audit summary
+        if: always()
+        run: |
+          # Shown on the run's summary page, so what the audit scanned is visible without opening logs.
+          {
+            echo "### AegisScan audit"
+            echo
+            if [ ! -f "$RUNNER_TEMP/audit.log" ]; then
+              echo "The audit step did not produce output (it failed before scanning)."
+            else
+              echo "- Compared with: \`${AUDIT_BASE:-unknown}\`"
+              if grep -q "scanning everything instead" "$RUNNER_TEMP/audit.log"; then
+                echo "- **That ref was not found, so the whole tree was scanned.**"
+              fi
+              echo "- Files analysed: $(awk '/^ *Analyzable/ {print $NF; exit}' "$RUNNER_TEMP/audit.log")"
+              echo "- $(grep -m1 'FINDINGS' "$RUNNER_TEMP/audit.log" | sed 's/^ *//')"
+              echo "- $(grep -m1 '\[CI GATE\]' "$RUNNER_TEMP/audit.log" | sed 's/^ *//')"
+              if grep -q '^  SEV ' "$RUNNER_TEMP/audit.log"; then
+                echo
+                echo "~~~"
+                sed -n '/^  SEV /,/^  V4 complete/p' "$RUNNER_TEMP/audit.log" | grep -v '^  V4 complete' | tr -d '`' | head -30
+                echo "~~~"
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload HTML Security Report
         if: always()

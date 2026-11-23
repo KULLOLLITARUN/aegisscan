@@ -38,7 +38,15 @@ jobs:
         run: mypy
 
       - name: Run tests
-        run: python -m pytest -q --cov=scanner --cov-report=term-missing --cov-fail-under=75
+        run: |
+          set -o pipefail
+          python -m pytest -q -rfE --cov=scanner --cov-report=term-missing --cov-fail-under=75 2>&1 | tee pytest.log
+
+      - name: Show failed tests as annotations
+        if: failure()
+        run: |
+          grep -E "^(FAILED|ERROR)" pytest.log | cut -c1-400 | while IFS= read -r line; do echo "::error::$line"; done || true
+          grep -E "^(TOTAL|FAIL Required)" pytest.log | while IFS= read -r line; do echo "::error::$line"; done || true
 
       - name: Run AegisScan Security Audit
         env:

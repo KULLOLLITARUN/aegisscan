@@ -116,3 +116,68 @@ def test_mongo_where_rule(tmp_path: Path) -> None:
     hits = {r["start"]["line"] for r in json.loads(proc.stdout)["results"]
             if r["check_id"].endswith("aegis-js-mongo-where-injection")}
     assert hits == {1, 2}
+
+
+# ---- CI hygiene cap (Gin: 17 of 22 findings were workflow notes) ----
+
+def test_workflow_hygiene_notes_are_capped_at_low(tmp_path: Path) -> None:
+    from scanner.intelligence.context import cap_ci_hygiene
+
+    wf = str(tmp_path / ".github" / "workflows" / "ci.yml")
+    notes = _f(path=wf, category="best_practices", severity=Severity.MEDIUM)
+    info = _f(path=str(tmp_path / ".github" / "dependabot.yml"), category="best_practices", severity=Severity.INFO)
+    real = _f(path=wf, category="injection", severity=Severity.HIGH)            # script injection stays
+    elsewhere = _f(path=str(tmp_path / "src" / "a.js"), category="best_practices", severity=Severity.MEDIUM)
+    out, n = cap_ci_hygiene([notes, info, real, elsewhere], tmp_path)
+    assert n == 1
+    assert out[0].severity == Severity.LOW and out[0].explanation.startswith("[CI configuration")
+    assert out[1].severity == Severity.INFO          # never raised
+    assert out[2].severity == Severity.HIGH
+    assert out[3].severity == Severity.MEDIUM
+
+
+# ---- found by scanning Django ----
+
+def test_performance_findings_in_tests_are_dropped(tmp_path: Path) -> None:
+    from scanner.intelligence.context import drop_test_performance
+
+    in_test = _f(path=str(tmp_path / "tests" / "a.py"), category="performance", severity=Severity.MEDIUM)
+    in_src = _f(path=str(tmp_path / "src" / "a.py"), category="performance", severity=Severity.MEDIUM)
+    sec_test = _f(path=str(tmp_path / "tests" / "a.py"), category="injection")
+    out, n = drop_test_performance([in_test, in_src, sec_test], tmp_path)
+    assert n == 1 and out == [in_src, sec_test]
+
+
+def _bandit(issue, explanation, evidence, line=5, sev=Severity.HIGH) -> Finding:
+    return Finding(
+        file_path=Path("a.py"), issue_type=issue, category="crypto", severity=sev, confidence=0.8,
+        line_start=line, line_end=line, evidence=evidence, explanation=explanation, rule_source="bandit",
+    )
+
+
+def test_trojansource_with_only_direction_marks_is_capped() -> None:
+    from scanner.intelligence.context import soften_bandit_false_alarms
+
+    # Bandit's message spells the code points out as the text \u200f, not as the characters
+    marks = _bandit("Trojansource", "contains bidirectional control characters ('\\u200f').", "5 X = 1")
+    attack = _bandit("Trojansource", "contains bidirectional control characters ('\\u202e').", "5 X = 1")
+    mixed = _bandit("Trojansource", "contains bidirectional control characters ('\\u200f', '\\u2067').", "5 X = 1")
+    out, n = soften_bandit_false_alarms([marks, attack, mixed])
+    assert n == 1
+    assert out[0].severity == Severity.LOW
+    assert out[1].severity == Severity.HIGH and out[2].severity == Severity.HIGH
+
+
+def test_weak_hash_is_capped_unless_the_line_is_about_a_secret() -> None:
+    from scanner.intelligence.context import soften_bandit_false_alarms
+
+    cache_key = _bandit("Hashlib", "Use of weak SHA1 hash for security.",
+                        '4     x = 1\n5     return sha1(text.encode()).hexdigest()\n6 y = 2')
+    password = _bandit("Hashlib", "Use of weak MD5 hash for security.",
+                       "4     self.check(password, salt)\n5     h = hashlib.md5(salt + password).hexdigest()")
+    unknown = _bandit("Hashlib", "Use of weak MD5 hash for security.", "no numbered lines here")
+    out, n = soften_bandit_false_alarms([cache_key, password, unknown])
+    assert n == 1
+    assert out[0].severity == Severity.LOW and out[0].explanation.startswith("[likely benign")
+    assert out[1].severity == Severity.HIGH           # password hashing stays high
+    assert out[2].severity == Severity.HIGH           # cannot tell: leave it alone

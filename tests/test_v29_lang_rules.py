@@ -89,6 +89,10 @@ PHP = [
     ("password_hash", "password_hash($password, PASSWORD_DEFAULT);", None),
     ("redirect_get", 'header("Location: " . $_GET["n"]);', "redirect"),
     ("redirect_var", 'header("Location: " . $next);', None),
+    # found on DVWA: lowercase header name, a space before "(", single quotes, extra arguments
+    ("redirect_lowercase_space", 'header ("location: " . $_GET["redirect"]);', "redirect"),
+    ("redirect_single_quotes", "header('Location: ' . $_POST['to'], true, 302);", "redirect"),
+    ("redirect_other_header", 'header("X-Next: " . $_GET["n"]);', None),
     ("header_other", 'header("Content-Type: text/plain");', None),
     ("fgc_get", 'file_get_contents("/srv/" . $_GET["f"]);', "path_traversal"),
     ("fopen_req", 'fopen($_REQUEST["log"], "r");', "path_traversal"),

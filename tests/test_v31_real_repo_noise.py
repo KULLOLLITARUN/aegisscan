@@ -256,3 +256,71 @@ def test_llm_alone_and_close_static_confidence_behave_as_before() -> None:
     static = _f(path="a.go", category="best_practices", severity=Severity.MEDIUM, conf=0.90, source="semgrep")
     model = _f(path="a.go", category="best_practices", severity=Severity.HIGH, conf=0.95, source="llm")
     assert deduplicate([static, model])[0][0].rule_source == "semgrep"     # within the 0.10 location margin
+
+
+# ---- LLM noise filter (live runs on Gin and NodeGoat) ----
+
+def _model(path, issue, category="best_practices", severity=Severity.MEDIUM, conf=0.95, explanation="why") -> Finding:
+    f = _f(path=path, category=category, severity=severity, conf=conf, source="llm", issue=issue)
+    return f.model_copy(update={"explanation": explanation})
+
+
+def test_llm_code_quality_remarks_are_capped(tmp_path: Path) -> None:
+    from scanner.intelligence.context import LLM_NOISE_CONFIDENCE_CAP, soften_llm_noise
+
+    src = str(tmp_path / "app" / "routes" / "a.js")
+    remarks = [
+        _model(src, "Missing Error Handling"),
+        _model(src, "ReferenceError: undefined variable environmentalScripts"),
+        _model(src, "Missing radix argument in parseInt"),
+        _model(src, "Inefficient use of eval impacts performance", category="performance"),
+        _model(src, "Potential Negative Value", severity=Severity.MEDIUM, conf=1.0),
+    ]
+    out, n = soften_llm_noise(remarks, tmp_path)
+    assert n == len(remarks)
+    for f in out:
+        assert f.severity == Severity.LOW and f.confidence == LLM_NOISE_CONFIDENCE_CAP
+        assert f.explanation.startswith("[model remark")
+
+
+def test_security_findings_and_static_findings_are_never_touched(tmp_path: Path) -> None:
+    from scanner.intelligence.context import soften_llm_noise
+
+    src = str(tmp_path / "app" / "routes" / "session.js")
+    keep = [
+        _model(src, "Session Fixation", category="access_control", severity=Severity.HIGH, conf=0.9),
+        _model(src, "Server-Side Request Forgery (SSRF)", category="access_control", severity=Severity.HIGH, conf=1.0),
+        _model(src, "Cross-Site Scripting (XSS) via unsanitized response body", category="injection", conf=1.0),
+        # a quality-sounding word in the explanation, not the title, does not trigger the filter
+        _model(src, "Open Redirect", category="injection", severity=Severity.HIGH,
+               explanation="missing error handling lets an attacker choose the target"),
+        # the same title from a static tool is not the model's remark
+        _f(path=src, category="best_practices", severity=Severity.MEDIUM, conf=0.9, source="semgrep", issue="Missing Error Handling"),
+    ]
+    out, n = soften_llm_noise(keep, tmp_path)
+    assert n == 0
+    assert out == keep
+
+
+def test_llm_findings_in_developer_tooling_are_capped_whatever_the_category(tmp_path: Path) -> None:
+    from scanner.intelligence.context import soften_llm_noise
+
+    seed = _model(str(tmp_path / "artifacts" / "db-reset.js"), "Potential secret leakage via error logging", category="secrets")
+    grunt = _model(str(tmp_path / "Gruntfile.js"), "Command injection via environment", category="injection", severity=Severity.HIGH)
+    app = _model(str(tmp_path / "app" / "routes" / "a.js"), "Command injection via request", category="injection", severity=Severity.HIGH)
+    static_in_tooling = _f(path=str(tmp_path / "artifacts" / "x.js"), category="injection", severity=Severity.HIGH, source="semgrep")
+    out, n = soften_llm_noise([seed, grunt, app, static_in_tooling], tmp_path)
+    assert n == 2
+    assert out[0].severity == Severity.LOW and out[1].severity == Severity.LOW
+    assert out[2] is app and out[3] is static_in_tooling
+
+
+def test_llm_noise_filter_is_idempotent_and_leaves_small_findings_alone(tmp_path: Path) -> None:
+    from scanner.intelligence.context import soften_llm_noise
+
+    src = str(tmp_path / "a.js")
+    once, n1 = soften_llm_noise([_model(src, "Missing Error Handling")], tmp_path)
+    twice, n2 = soften_llm_noise(once, tmp_path)
+    assert (n1, n2) == (1, 0) and twice == once
+    already = _model(src, "Missing Error Handling", severity=Severity.LOW, conf=0.4)
+    assert soften_llm_noise([already], tmp_path)[1] == 0

@@ -42,6 +42,7 @@ from scanner.intelligence.context import (
     cap_ci_hygiene,
     drop_test_performance,
     soften_bandit_false_alarms,
+    soften_llm_noise,
     weight_by_context,
 )
 from scanner.intelligence.correlator import CorrelationGroup, correlate
@@ -412,6 +413,7 @@ def run(
     deduped, _ = cap_ci_hygiene(deduped, path)
     deduped, _ = drop_test_performance(deduped, path)
     deduped, _ = soften_bandit_false_alarms(deduped)
+    deduped, _ = soften_llm_noise(deduped, path)
 
     # ---- 7. Correlate ----
     correlated, groups = correlate(deduped)

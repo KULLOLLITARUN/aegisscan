@@ -182,3 +182,76 @@ def soften_bandit_false_alarms(findings: list[Finding]) -> tuple[list[Finding], 
     if n:
         log.info("Context weighting: capped %d benign Bandit finding(s) at low", n)
     return out, n
+
+
+# ---------------------------------------------------------------------------
+# Found by live LLM runs on Gin and NodeGoat: the model is useful for design-level bugs (session
+# fixation, access control, response handling) but pads its output with code-quality remarks and
+# findings about developer tooling.
+# ---------------------------------------------------------------------------
+
+# Directories (relative to the scan target) and files that are build, seed or maintenance tooling,
+# not the application. Judged for LLM findings only: static tools are not affected.
+DEV_TOOLING_DIRS: frozenset[str] = frozenset({"artifacts", "scripts", "tools", "tooling", "tasks", "build", "ci"})
+DEV_TOOLING_FILES: frozenset[str] = frozenset({
+    "gruntfile.js", "gulpfile.js", "gulpfile.ts", "makefile", "rakefile", "fabfile.py", "noxfile.py", "tasks.py",
+})
+
+# Titles of "best practice" or "performance" remarks that are about code quality, not security.
+# Matched against the finding's short title only, so a security finding that merely mentions
+# error handling in its explanation is not caught.
+_QUALITY_TITLE = re.compile(
+    r"(?i)error handling|ignored error|ignoring .*(exit|status|error)|exit status|failure handling"
+    r"|undefined variable|referenceerror|radix|rel attribute|zero.?based|negative value|invalid (day|month|date)"
+    r"|hard.?coded template|force option|incomplete .*implementation|double.?escap"
+    r"|unnecessary|inefficient|performance|broad version|deprecated"
+)
+LLM_NOISE_CONFIDENCE_CAP: float = 0.5
+LLM_NOISE_NOTE = "[model remark about code quality or tooling; severity and confidence capped] "
+_QUALITY_CATEGORIES = frozenset({"best_practices", "performance"})
+
+
+def _is_dev_tooling(file_path: Path, root: Path) -> bool:
+    try:
+        rel = Path(file_path).resolve().relative_to(Path(root).resolve())
+    except (ValueError, OSError):
+        return False
+    return rel.name.lower() in DEV_TOOLING_FILES or any(p.lower() in DEV_TOOLING_DIRS for p in rel.parts[:-1])
+
+
+def _llm_noise_update(f: Finding, root: Path) -> dict | None:
+    if f.rule_source != "llm":
+        return None
+    quality = f.category in _QUALITY_CATEGORIES and bool(_QUALITY_TITLE.search(f.issue_type))
+    if not (quality or _is_dev_tooling(f.file_path, root)):
+        return None
+    update: dict = {}
+    if _SEVERITY_ORDER.index(f.severity) > _SEVERITY_ORDER.index(Severity.LOW):
+        update["severity"] = Severity.LOW
+    if f.confidence > LLM_NOISE_CONFIDENCE_CAP:
+        update["confidence"] = LLM_NOISE_CONFIDENCE_CAP
+    if update and not f.explanation.startswith(("[model remark", "[non-production", "[CI configuration")):
+        update["explanation"] = LLM_NOISE_NOTE + f.explanation
+    return update or None
+
+
+def soften_llm_noise(findings: list[Finding], root: Path) -> tuple[list[Finding], int]:
+    """Cap LLM remarks about code quality, and any LLM finding in developer tooling, at low / 0.5.
+
+    Heuristic, tuned on two live runs (Gin, NodeGoat): of 36 NodeGoat findings, 4 were real,
+    design-level bugs (session fixation, access control, XSS through a fetched body); about 16
+    were remarks like "missing error handling" or findings in `artifacts/` and `Gruntfile.js`.
+    Findings are kept and shown, only weighted down. Security-category findings outside
+    developer tooling are never touched.
+    """
+    out: list[Finding] = []
+    n = 0
+    for f in findings:
+        update = _llm_noise_update(f, root)
+        if update:
+            n += 1
+            f = f.model_copy(update=update)
+        out.append(f)
+    if n:
+        log.info("Context weighting: capped %d LLM code-quality or tooling remark(s)", n)
+    return out, n

@@ -412,8 +412,8 @@ def run(
     final_findings, n_suppressed = baseline.suppress(correlated, path)
 
     # ---- 9. Scoring (V4) ----
-    sec_sc = security_score(final_findings)
-    opt_sc = optimization_score(final_findings)
+    sec_sc = security_score(final_findings, analyzable_count)
+    opt_sc = optimization_score(final_findings, analyzable_count)
 
     duration = time.monotonic() - t0
 

@@ -101,3 +101,121 @@ rules:
       - pattern-not: $FN(<... realpath(<... $_GET[...] ...>) ...>, ...)
       - pattern-not: $FN(<... realpath(<... $_POST[...] ...>) ...>, ...)
       - pattern-not: $FN(<... realpath(<... $_REQUEST[...] ...>) ...>, ...)
+
+  # ---------------------------------------------------------------------------------------------
+  # Taint rules: a request value reaches a dangerous sink through a variable in the same file or
+  # function (the direct-use rules above only see `include($_GET[...])` written in one expression).
+  # Semgrep OSS follows the flow inside one file; it does not follow it across files or through
+  # function calls, and it cannot see an allow-list check (`in_array($page, $allowed)`), so such
+  # code is still reported. Casts and the usual escaping functions end the flow.
+  # ---------------------------------------------------------------------------------------------
+  - id: aegis-php-taint-file-inclusion
+    languages: [php]
+    severity: ERROR
+    message: "A request value reaches include/require, allowing local or remote file inclusion; use an allow-list of pages"
+    metadata: {aegis_category: path_traversal, aegis_confidence: "0.85"}
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET[...]
+          - pattern: $_POST[...]
+          - pattern: $_REQUEST[...]
+          - pattern: $_COOKIE[...]
+    pattern-sanitizers:
+      # a validation call on the variable ends the flow for the code after it (allow-lists, digits)
+      - patterns:
+          - pattern-either:
+              - pattern: in_array($X, ...)
+              - pattern: is_numeric($X)
+              - pattern: ctype_digit($X)
+              - pattern: ctype_alnum($X)
+          - focus-metavariable: $X
+        by-side-effect: true
+      - pattern-either:
+          - pattern: basename(...)
+          - pattern: realpath(...)
+          - pattern: intval(...)
+          - pattern: (int) $X
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: include($X)
+              - pattern: include_once($X)
+              - pattern: require($X)
+              - pattern: require_once($X)
+          # include(<... $_GET[...] ...>) written in one expression is aegis-php-include-request's;
+          # reporting it here too would show the same line twice
+          - pattern-not-regex: '\$_(GET|POST|REQUEST|COOKIE)'
+
+  - id: aegis-php-taint-xss
+    languages: [php]
+    severity: WARNING
+    message: "A request value is echoed without escaping (reflected XSS); wrap it in htmlspecialchars()"
+    metadata: {aegis_category: xss, aegis_confidence: "0.75"}
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET[...]
+          - pattern: $_POST[...]
+          - pattern: $_REQUEST[...]
+          - pattern: $_COOKIE[...]
+    pattern-sanitizers:
+      # a validation call on the variable ends the flow for the code after it (allow-lists, digits)
+      - patterns:
+          - pattern-either:
+              - pattern: in_array($X, ...)
+              - pattern: is_numeric($X)
+              - pattern: ctype_digit($X)
+              - pattern: ctype_alnum($X)
+          - focus-metavariable: $X
+        by-side-effect: true
+      - pattern-either:
+          - pattern: htmlspecialchars(...)
+          - pattern: htmlentities(...)
+          - pattern: strip_tags(...)
+          - pattern: intval(...)
+          - pattern: floatval(...)
+          - pattern: json_encode(...)
+          - pattern: urlencode(...)
+          - pattern: (int) $X
+    pattern-sinks:
+      - pattern-either:
+          - pattern: echo $X;
+          - pattern: print $X;
+          - pattern: print($X);
+
+  - id: aegis-php-taint-command-injection
+    languages: [php]
+    severity: ERROR
+    message: "A request value reaches a shell command; use escapeshellarg() or avoid the shell"
+    metadata: {aegis_category: injection, aegis_confidence: "0.85"}
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET[...]
+          - pattern: $_POST[...]
+          - pattern: $_REQUEST[...]
+          - pattern: $_COOKIE[...]
+    pattern-sanitizers:
+      # a validation call on the variable ends the flow for the code after it (allow-lists, digits)
+      - patterns:
+          - pattern-either:
+              - pattern: in_array($X, ...)
+              - pattern: is_numeric($X)
+              - pattern: ctype_digit($X)
+              - pattern: ctype_alnum($X)
+          - focus-metavariable: $X
+        by-side-effect: true
+      - pattern-either:
+          - pattern: escapeshellarg(...)
+          - pattern: escapeshellcmd(...)
+          - pattern: intval(...)
+          - pattern: (int) $X
+    pattern-sinks:
+      - pattern-either:
+          - pattern: shell_exec($X)
+          - pattern: exec($X, ...)
+          - pattern: system($X, ...)
+          - pattern: passthru($X, ...)
+          - pattern: popen($X, ...)
+          - pattern: proc_open($X, ...)

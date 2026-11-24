@@ -204,3 +204,106 @@ rules:
           - pattern: '{ $where: "..." + $X }'
           - pattern: '{ $where: $X + "..." }'
           - pattern: '{ "$where": "..." + $X }'
+
+  # ---------------------------------------------------------------------------------------------
+  # Taint rules: a request value reaches a sink through a variable in the same file or function.
+  # Semgrep OSS follows the flow inside one file only (not across modules or function calls), and
+  # cannot see custom validation, so only well-known escaping and numeric conversion end a flow.
+  # ---------------------------------------------------------------------------------------------
+  - id: aegis-js-taint-reflected-xss
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "A request value is written into an HTML response without escaping (reflected XSS)"
+    metadata: {aegis_category: xss, aegis_confidence: "0.75"}
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$P
+          - metavariable-regex: {metavariable: $REQ, regex: '^(req|request)$'}
+          - metavariable-regex: {metavariable: $P, regex: '^(query|params|body|cookies|headers)$'}
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: escapeHtml(...)
+          - pattern: escape(...)
+          - pattern: $M.escape(...)
+          - pattern: sanitizeHtml(...)
+          - pattern: $M.sanitize(...)
+          - pattern: xss(...)
+          - pattern: filterXSS(...)
+          - pattern: encodeURIComponent(...)
+          - pattern: parseInt(...)
+          - pattern: parseFloat(...)
+          - pattern: Number(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.send("..." + $X)
+              - pattern: $RES.send($X + "...")
+              - pattern: $RES.send(`...${$X}...`)
+              - pattern: $RES.write("..." + $X)
+              - pattern: $RES.write($X + "...")
+              - pattern: $RES.write(`...${$X}...`)
+              - pattern: $RES.end("..." + $X)
+              - pattern: $RES.end(`...${$X}...`)
+          - metavariable-regex: {metavariable: $RES, regex: '^(res|response)$'}
+
+  - id: aegis-js-taint-command-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "A request value reaches a shell command; use execFile with an argument array"
+    metadata: {aegis_category: injection, aegis_confidence: "0.85"}
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$P
+          - metavariable-regex: {metavariable: $REQ, regex: '^(req|request)$'}
+          - metavariable-regex: {metavariable: $P, regex: '^(query|params|body|cookies|headers)$'}
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: parseInt(...)
+          - pattern: parseFloat(...)
+          - pattern: Number(...)
+          - pattern: shellEscape(...)
+          - pattern: shellescape(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: exec($X, ...)
+          - pattern: execSync($X, ...)
+          - pattern: $CP.exec($X, ...)
+          - pattern: $CP.execSync($X, ...)
+
+  - id: aegis-js-taint-path-traversal
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "A request value reaches a filesystem path without a containment check (path traversal)"
+    metadata: {aegis_category: path_traversal, aegis_confidence: "0.75"}
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$P
+          - metavariable-regex: {metavariable: $REQ, regex: '^(req|request)$'}
+          - metavariable-regex: {metavariable: $P, regex: '^(query|params|body|cookies|headers)$'}
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: path.basename(...)
+          - pattern: basename(...)
+          - pattern: parseInt(...)
+          - pattern: Number(...)
+          - pattern: encodeURIComponent(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $FS.readFile($X, ...)
+              - pattern: $FS.readFileSync($X, ...)
+              - pattern: $FS.createReadStream($X, ...)
+              - pattern: $FS.writeFile($X, ...)
+              - pattern: $FS.writeFileSync($X, ...)
+              - pattern: $FS.unlink($X, ...)
+              - pattern: $FS.unlinkSync($X, ...)
+              - pattern: $FS.sendFile($X, ...)
+              - pattern: $FS.download($X, ...)
+          - metavariable-regex: {metavariable: $FS, regex: '^(fs|fsp|promises|res|response)$'}
+          # Express refuses to leave the `root` directory, so these calls are the standard fix
+          - pattern-not: '$FS.sendFile($X, {root: ...}, ...)'
+          - pattern-not: '$FS.download($X, {root: ...}, ...)'
+          - pattern-not: '$FS.download($X, $NAME, {root: ...}, ...)'

@@ -228,6 +228,19 @@
       {"lines": [14, 14], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "fopen($_REQUEST[...])"}
     ]},
     {"path": "benchmark_multilang/php/safe_more_sinks.php", "labels": []},
+    {"path": "benchmark_multilang/php/taint_flows.php", "labels": [
+      {"lines": [4, 4], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "include of a variable assigned from $_GET"},
+      {"lines": [7, 7], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "echo of a variable assigned from $_GET"},
+      {"lines": [10, 10], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "shell_exec with a variable assigned from $_POST"},
+      {"lines": [14, 14], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "print of a variable assigned from $_REQUEST inside a function"}
+    ]},
+    {"path": "benchmark_multilang/php/safe_taint_flows.php", "labels": []},
+    {"path": "vulnerable_js/taint_flows.js", "labels": [
+      {"lines": [8, 8], "category": "xss", "expected_by": ["semgrep", "llm"], "note": "res.send of a string built from a variable assigned from req.query"},
+      {"lines": [13, 13], "category": "path_traversal", "expected_by": ["semgrep", "llm"], "note": "fs.readFile of a path built from a variable assigned from req.query"},
+      {"lines": [18, 18], "category": "injection", "expected_by": ["semgrep", "llm"], "note": "exec with a command built from a variable assigned from req.body"}
+    ]},
+    {"path": "tricky_clean_js/safe_taint_flows.js", "labels": []},
     {"path": "benchmark_multilang/csharp/MoreSinks.cs", "labels": [
       {"lines": [18, 18], "category": "network", "expected_by": ["semgrep", "llm"], "note": "certificate validation callback always returns true"},
       {"lines": [23, 23], "category": "network", "expected_by": ["semgrep", "llm"], "note": "HttpClientHandler accepts any server certificate"},

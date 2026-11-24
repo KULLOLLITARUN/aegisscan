@@ -20,6 +20,7 @@ from scanner.models.finding import Finding
 from scanner.static_analysis.bandit_runner import run_bandit
 from scanner.static_analysis.gitleaks_runner import run_gitleaks
 from scanner.static_analysis.optimization_runner import run_optimizer
+from scanner.static_analysis.osv_runner import run_osv
 from scanner.static_analysis.scope import within
 from scanner.static_analysis.semgrep_runner import run_semgrep
 
@@ -33,6 +34,7 @@ def run_all_tools(
     target: Path,
     progress: Callable[[str], None] | None = None,
     only_files: Iterable[Path] | None = None,
+    privacy: str = "standard",
 ) -> tuple[list[Finding], list[str]]:
     """
     Run all configured static analysis tools against *target*.
@@ -88,6 +90,17 @@ def run_all_tools(
         tools_run.append("gitleaks")
     else:
         log.debug("Gitleaks: no findings or not available")
+
+    # --- OSV-Scanner (optional CLI; dependency CVEs). It sends package names and versions to
+    # api.osv.dev, so --privacy strict switches it off. ---
+    if privacy == "strict":
+        log.info("OSV-Scanner skipped: --privacy strict forbids sending package names to api.osv.dev")
+    else:
+        _step("OSV-Scanner")
+        osv_findings = run_osv(target, files, config.exclude_dirs)
+        if osv_findings:
+            all_findings.extend(osv_findings)
+            tools_run.append("osv-scanner")
 
     # --- Optimizer (pure-Python AST checks, always available) ---
     _step("Optimizer")

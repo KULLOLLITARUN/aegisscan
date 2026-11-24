@@ -116,7 +116,7 @@ def test_cli_parses_changed_since() -> None:
 def test_run_with_changed_since_scans_only_what_changed_on_a_clean_tree(repo: Path, monkeypatch) -> None:
     scopes: list[list[str] | None] = []
 
-    def fake_tools(target, progress=None, only_files=None):
+    def fake_tools(target, progress=None, only_files=None, privacy="standard"):
         scopes.append(None if only_files is None else sorted(Path(f).name for f in only_files))
         return [], []
 

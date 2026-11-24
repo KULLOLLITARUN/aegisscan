@@ -31,6 +31,17 @@ jobs:
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks
           gitleaks version
 
+      - name: Install OSV-Scanner
+        run: |
+          # Dependency CVE scanning. Pinned version, checksum verified before it is put on PATH.
+          OSV_VERSION=2.7.1
+          OSV_SHA256=fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8
+          curl -sSfL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SHA256}  osv-scanner" | sha256sum -c -
+          sudo install -m 0755 osv-scanner /usr/local/bin/osv-scanner
+          rm osv-scanner
+          osv-scanner --version
+
       - name: Lint (ruff)
         run: ruff check .
 

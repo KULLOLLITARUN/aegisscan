@@ -226,6 +226,8 @@ MIT License, free for open-source and commercial use. See [LICENSE](LICENSE).
 
 Static tools: Bandit and the built-in optimizer ship with the package; install Semgrep with `pip install ".[static]"` and Gitleaks from its [releases page](https://github.com/gitleaks/gitleaks/releases). Missing tools are skipped, never fatal.
 
+**Dependency vulnerabilities (SCA):** if [OSV-Scanner](https://github.com/google/osv-scanner) (v2, Apache-2.0) is on `PATH`, AegisScan runs it over lockfiles and manifests (`requirements.txt`, `package-lock.json`, `go.mod`, `pom.xml`, `Cargo.lock`, …). Findings use `category="dependencies"`, `rule_source="osv"` and point at the line that pins the vulnerable version. It sends package names and versions (never your code) to api.osv.dev, so `--privacy strict` disables it. With `--changed-only` / `--changed-since` it runs only when a lockfile changed.
+
 The web server (`--server`) binds to `127.0.0.1`, sends no CORS headers and rejects non-local `Host`/`Origin` headers.
 
 Tree-sitter chunking covers Python, JavaScript, TypeScript, Go, Java, PHP and C#; other languages (including SQL) use the generic chunker.

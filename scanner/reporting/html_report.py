@@ -49,6 +49,7 @@ _SOURCE_COLORS: dict[str, str] = {
     "gitleaks": "#ff4444",
     "llm":      "#a371f7",
     "aegis-opt": "#3fb950",
+    "osv":      "#e3792b",
 }
 
 

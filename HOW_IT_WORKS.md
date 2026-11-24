@@ -42,7 +42,7 @@ For every remaining file, `chunk_file()` picks a strategy:
 
 ### 4. Static analysis — `scanner/static_analysis/runner.py`
 
-`run_all_tools()` runs Bandit, Semgrep, and Gitleaks concurrently against the target directory and normalizes every tool's native output into the shared `Finding` model (file, line range, evidence, severity, `rule_source="bandit"/"semgrep"/"gitleaks"`). This stage never touches the network and needs no API key — it's what `--static-only` limits you to.
+`run_all_tools()` runs Bandit, Semgrep, Gitleaks and (when installed) OSV-Scanner for dependency CVEs — the last one is skipped under `--privacy strict` because it sends package names/versions to OSV — concurrently against the target directory and normalizes every tool's native output into the shared `Finding` model (file, line range, evidence, severity, `rule_source="bandit"/"semgrep"/"gitleaks"`). This stage never touches the network and needs no API key — it's what `--static-only` limits you to.
 
 ### 5. LLM reasoning — `scanner/llm/`
 

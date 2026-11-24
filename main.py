@@ -356,6 +356,7 @@ def run(
         # --changed-only: the tools read just the changed files (discovered_files was already cut
         # down to them above) instead of the whole tree. None = scan everything.
         only_files=discovered_files if changed is not None else None,
+        privacy=privacy,
     )
     if changed is not None:
         # Safety net: a tool must never blame a change for issues in files that did not change,

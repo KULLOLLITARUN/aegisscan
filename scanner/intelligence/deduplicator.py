@@ -176,6 +176,38 @@ def _collapse_same_spot(findings: list[Finding]) -> list[Finding]:
     return [max(g, key=rank) if len(g) > 1 else g[0] for g in groups]
 
 
+# An LLM finding in one of these categories is never dropped for echoing a static note: a static
+# "best practice" hit on the same line must not hide a model's claim of injection or XSS.
+_HIGH_IMPACT_LLM_CATEGORIES: frozenset[str] = frozenset({"injection", "xss", "deserialization", "path_traversal"})
+
+
+def _ranges_intersect(a: Finding, b: Finding) -> bool:
+    return a.line_start <= b.line_end and b.line_start <= a.line_end
+
+
+def _drop_llm_echoes(findings: list[Finding]) -> list[Finding]:
+    """Drop an LLM finding that re-labels a static catch-all note on the very same lines.
+
+    Found live on Gin: the model re-reported Semgrep's "mutable action tag" notes under other
+    categories (`access_control`, `secrets`) and at confidence 1.00, so the same line counted twice
+    and the copy outranked the original. The clustering step cannot merge them, because it needs
+    equal categories. The static finding has the exact location and the vaguer label, so it stays.
+    """
+    static_notes = [f for f in findings if f.rule_source != "llm" and f.category == "best_practices"]
+    if not static_notes:
+        return findings
+    kept: list[Finding] = []
+    for f in findings:
+        if (
+            f.rule_source == "llm"
+            and f.category not in ("best_practices", *_HIGH_IMPACT_LLM_CATEGORIES)
+            and any(s.file_path == f.file_path and _ranges_intersect(s, f) for s in static_notes)
+        ):
+            continue
+        kept.append(f)
+    return kept
+
+
 def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
     """
     Remove near-duplicate findings and return (deduped_list, n_suppressed).
@@ -188,7 +220,7 @@ def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
         return [], 0
 
     total = len(findings)
-    findings = _collapse_same_spot(findings)
+    findings = _drop_llm_echoes(_collapse_same_spot(findings))
 
     # Cluster findings
     clusters: list[list[Finding]] = []

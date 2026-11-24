@@ -65,6 +65,7 @@ def weight_by_context(findings: list[Finding], root: Path) -> tuple[list[Finding
 
 
 CI_HYGIENE_NOTE = "[CI configuration hygiene note; severity capped at low] "
+LLM_CI_CONFIDENCE_CAP: float = 0.5   # a model's notes about workflow files are never stated as near-certain
 _SEVERITY_ORDER = [Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL]
 
 
@@ -74,6 +75,27 @@ def _in_github_config(file_path: Path, root: Path) -> bool:
     except (ValueError, OSError):
         return False
     return bool(rel.parts) and rel.parts[0].lower() == ".github"
+
+
+def _ci_hygiene_update(f: Finding) -> dict | None:
+    """The changes to make to a finding in a `.github/` file, or None to leave it alone.
+
+    A static tool's "best practice" note is hygiene. An LLM finding in any category except
+    injection is treated the same way: on Gin the model labelled the same workflow notes
+    `access_control` / `secrets` at confidence 1.00 and rated seven of them high, which pulled the
+    score from 70 to 27.
+    """
+    from_llm = f.rule_source == "llm" and f.category != "injection"
+    if f.category != "best_practices" and not from_llm:
+        return None
+    update: dict = {}
+    if _SEVERITY_ORDER.index(f.severity) > _SEVERITY_ORDER.index(Severity.LOW):
+        update["severity"] = Severity.LOW
+    if from_llm and f.confidence > LLM_CI_CONFIDENCE_CAP:
+        update["confidence"] = LLM_CI_CONFIDENCE_CAP
+    if update:
+        update["explanation"] = CI_HYGIENE_NOTE + f.explanation
+    return update or None
 
 
 def cap_ci_hygiene(findings: list[Finding], root: Path) -> tuple[list[Finding], int]:
@@ -88,18 +110,11 @@ def cap_ci_hygiene(findings: list[Finding], root: Path) -> tuple[list[Finding], 
     out: list[Finding] = []
     n = 0
     for f in findings:
-        if (
-            f.category == "best_practices"
-            and _SEVERITY_ORDER.index(f.severity) > _SEVERITY_ORDER.index(Severity.LOW)
-            and _in_github_config(f.file_path, root)
-        ):
+        update = _ci_hygiene_update(f) if _in_github_config(f.file_path, root) else None
+        if update:
             n += 1
-            out.append(f.model_copy(update={
-                "severity": Severity.LOW,
-                "explanation": CI_HYGIENE_NOTE + f.explanation,
-            }))
-        else:
-            out.append(f)
+            f = f.model_copy(update=update)
+        out.append(f)
     if n:
         log.info("Context weighting: capped %d CI hygiene finding(s) at low", n)
     return out, n

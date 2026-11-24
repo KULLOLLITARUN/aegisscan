@@ -181,3 +181,49 @@ def test_weak_hash_is_capped_unless_the_line_is_about_a_secret() -> None:
     assert out[0].severity == Severity.LOW and out[0].explanation.startswith("[likely benign")
     assert out[1].severity == Severity.HIGH           # password hashing stays high
     assert out[2].severity == Severity.HIGH           # cannot tell: leave it alone
+
+
+# ---- found by the live LLM run on Gin: the model echoed Semgrep's workflow notes ----
+
+def _llm(path, line=10, category="access_control", severity=Severity.HIGH, conf=1.0) -> Finding:
+    return _f(path=path, line=line, category=category, severity=severity, conf=conf, source="llm", issue="Mutable action reference")
+
+
+def test_llm_notes_about_workflow_files_are_capped_in_severity_and_confidence(tmp_path: Path) -> None:
+    from scanner.intelligence.context import LLM_CI_CONFIDENCE_CAP, cap_ci_hygiene
+
+    wf = str(tmp_path / ".github" / "workflows" / "ci.yml")
+    echo = _llm(wf)                                                   # access_control, high, 1.00
+    secrets = _llm(wf, category="secrets", severity=Severity.MEDIUM, conf=0.85)
+    script_injection = _llm(wf, category="injection")                 # a real problem class: untouched
+    static_access = _f(path=wf, category="access_control", severity=Severity.HIGH, source="semgrep")
+    elsewhere = _llm(str(tmp_path / "src" / "a.go"))
+    already_small = _llm(wf, severity=Severity.LOW, conf=0.4)
+    out, n = cap_ci_hygiene([echo, secrets, script_injection, static_access, elsewhere, already_small], tmp_path)
+    assert n == 2
+    assert (out[0].severity, out[0].confidence) == (Severity.LOW, LLM_CI_CONFIDENCE_CAP)
+    assert (out[1].severity, out[1].confidence) == (Severity.LOW, LLM_CI_CONFIDENCE_CAP)
+    assert out[2] is script_injection
+    assert out[3] is static_access
+    assert out[4] is elsewhere
+    assert out[5] is already_small
+
+
+def test_llm_relabel_of_a_static_note_on_the_same_lines_is_dropped() -> None:
+    static = _f(path="a.yml", line=10, category="best_practices", severity=Severity.MEDIUM, source="semgrep")
+    echo = _llm("a.yml", line=10)
+    kept, n = deduplicate([static, echo])
+    assert kept == [static] and n == 1
+
+
+def test_llm_findings_that_say_more_than_a_catch_all_note_are_kept() -> None:
+    static = _f(path="a.js", line=10, category="best_practices", source="semgrep")
+    for category in ("injection", "xss", "deserialization", "path_traversal"):
+        kept, _ = deduplicate([static, _llm("a.js", line=10, category=category)])
+        assert len(kept) == 2, category
+    # a different line, or a different file, is a different finding
+    assert len(deduplicate([static, _llm("a.js", line=40)])[0]) == 2
+    assert len(deduplicate([static, _llm("b.js", line=10)])[0]) == 2
+    # a static finding that is not the catch-all category does not absorb it either
+    other = _f(path="a.js", line=10, category="crypto", source="semgrep")
+    assert len(deduplicate([other, _llm("a.js", line=10)])[0]) == 2

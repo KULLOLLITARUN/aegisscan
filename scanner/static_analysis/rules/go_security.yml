@@ -5,7 +5,7 @@ rules:
     languages: [go]
     severity: ERROR
     message: "A shell invoked with a non-literal script allows command injection; pass arguments separately and validate input"
-    metadata: {aegis_category: injection}
+    metadata: {aegis_category: injection, aegis_confidence: "0.85"}
     patterns:
       - pattern-either:
           - pattern: exec.Command("$SH", "$FLAG", $SCRIPT)
@@ -23,7 +23,7 @@ rules:
     languages: [go]
     severity: WARNING
     message: "Redirecting to a request value allows open redirects; validate against an allow-list"
-    metadata: {aegis_category: redirect}
+    metadata: {aegis_category: redirect, aegis_confidence: "0.80"}
     pattern-either:
       - pattern: http.Redirect($W, $R, <... $REQ.URL.Query().Get(...) ...>, ...)
       - pattern: http.Redirect($W, $R, <... $REQ.FormValue(...) ...>, ...)
@@ -33,7 +33,7 @@ rules:
     languages: [go]
     severity: WARNING
     message: "template.HTML/JS/URL marks a value as trusted and skips html/template escaping; a non-literal value can inject markup (XSS)"
-    metadata: {aegis_category: xss}
+    metadata: {aegis_category: xss, aegis_confidence: "0.70"}
     patterns:
       - pattern-either:
           - pattern: template.HTML($X)
@@ -49,7 +49,7 @@ rules:
     languages: [go]
     severity: WARNING
     message: "A request value reaches a filesystem path without a containment check (path traversal)"
-    metadata: {aegis_category: path_traversal}
+    metadata: {aegis_category: path_traversal, aegis_confidence: "0.80"}
     pattern-either:
       - pattern: os.ReadFile(<... $REQ.URL.Query().Get(...) ...>)
       - pattern: os.ReadFile(<... $REQ.FormValue(...) ...>)

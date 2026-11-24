@@ -143,9 +143,31 @@ select.ag-input { padding-right: var(--space-md); }
 .ag-live-hero small { font-size: var(--text-sm); color: var(--muted); }
 .ag-live-note { color: var(--muted); font-size: var(--text-sm); max-width: 34ch; margin-top: var(--space-xs); }
 .ag-steps { list-style: none; margin: var(--space-md) 0 0; padding: 0; display: grid; gap: var(--space-2xs); font-size: var(--text-sm); max-width: 38ch; }
-.ag-steps li { display: grid; grid-template-columns: 1.5ch minmax(0, 1fr) auto; gap: var(--space-xs); color: var(--muted); }
-.ag-steps li.active { color: var(--ink); animation: ag-breathe 1.6s var(--ease-out) infinite alternate; }
+.ag-steps li { position: relative; display: grid; grid-template-columns: 1.5ch minmax(0, 1fr) auto; gap: var(--space-xs); color: var(--muted); animation: ag-step-in var(--dur-long) var(--ease-out) both; }
+.ag-steps li.active { color: var(--ink); animation: ag-step-in var(--dur-long) var(--ease-out) both, ag-breathe 1.6s var(--ease-out) infinite alternate; }
 .ag-step-state { font-size: var(--text-xs); }
+
+/* Scan steps. A step slides in when the scanner reports it. The running step carries a sweeping line:
+   it is indeterminate on purpose, because the scanner reports which step it is on, not a percentage.
+   A finished step pops its mark. Animations are matched by name, so a step turning from running to done
+   does not replay its entrance. */
+.ag-steps li.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent) no-repeat; background-size: 40% 100%; animation: ag-sweep 1.4s linear infinite; }
+.ag-steps li.done .ag-step-mark { color: var(--good); animation: ag-pop var(--dur-short) var(--ease-out) both; }
+@keyframes ag-step-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes ag-sweep { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+@keyframes ag-pop { from { opacity: 0; transform: scale(0.4); } }
+
+/* Count-up for the severity counts. --n is a registered integer so it can be animated; the number is
+   drawn from a counter, and the real value stays in the DOM as text for assistive tech (see Count.jsx).
+   Browsers without @property just show the final number. */
+@property --n { syntax: "<integer>"; inherits: false; initial-value: 0; }
+.ag-count { counter-reset: ag-n var(--n); animation: ag-count 700ms var(--ease-out) both; }
+.ag-count::after { content: counter(ag-n); }
+@keyframes ag-count { from { --n: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ag-steps li.active::after { display: none; }
+}
 
 /* ---------- timeline ---------- */
 .ag-timeline { height: var(--timeline-h); flex: none; display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--space-lg); align-items: center; padding: 0 var(--space-xl); border-top: var(--rule-hair) solid var(--line); background: var(--paper-2); }

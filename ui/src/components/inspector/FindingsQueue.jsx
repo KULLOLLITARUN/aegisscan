@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { SEVERITIES, SEVERITY_LABEL, normSeverity, normCategory, CATEGORY_LABEL } from '../../constants'
+import { SEVERITIES, SEVERITY_LABEL, normSeverity, normCategory, CATEGORY_LABEL, sourceLabel } from '../../constants'
+import Count from '../Count'
 import { relPath } from '../../lib/paths'
 import { sortFindings } from '../../lib/scene'
 import ScanErrorBody from '../findings/ScanErrorBody'
@@ -85,10 +86,10 @@ export default function FindingsQueue({ result, scanning, error, selectedId, onS
           </select>
         </div>
         <div className="ag-chips" role="group" aria-label="Filter by severity">
-          <button type="button" className="ag-chip" aria-pressed={sev === 'all'} onClick={() => setSev('all')}>All<span className="ag-num">{findings.length}</span></button>
+          <button type="button" className="ag-chip" aria-pressed={sev === 'all'} onClick={() => setSev('all')}>All<Count n={findings.length} /></button>
           {SEVERITIES.filter((s) => counts[s]).map((s) => (
             <button type="button" key={s} className="ag-chip" aria-pressed={sev === s} onClick={() => setSev(s)}>
-              <i className={`ag-sq s-${s}`} />{SEVERITY_LABEL[s]}<span className="ag-num">{counts[s]}</span>
+              <i className={`ag-sq s-${s}`} />{SEVERITY_LABEL[s]}<Count n={counts[s]} />
             </button>
           ))}
         </div>
@@ -114,7 +115,7 @@ export default function FindingsQueue({ result, scanning, error, selectedId, onS
                     <span className="ag-issue">{f.issue_type}</span>
                     <span className="ag-sub">
                       <span className="ag-mono ag-loc">{relPath(f.file_path, result.target_path)}:{f.line_start}</span>
-                      <span>{f.rule_source}</span>
+                      <span>{sourceLabel(f.rule_source)}</span>
                     </span>
                   </span>
                   <span className="ag-conf ag-mono">{Math.round((f.confidence ?? 0) * 100)}%</span>

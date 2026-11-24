@@ -1,77 +1,100 @@
 # AegisScan — handoff for the next session
 
-_Written 2026-11-24 at the end of a long session. Read this first, then `Plans/REMAINING_ISSUES_AND_TESTING.md` (the detailed issue list, items 1–30) and `HOW_IT_WORKS.md`._
+_Updated 2026-11-24 after the real-repository round. Read this first, then `Plans/REMAINING_ISSUES_AND_TESTING.md` (the detailed issue list and fixed-items table) and `HOW_IT_WORKS.md`._
 
 ## 1. Snapshot
 
-**What it is:** a hybrid security + optimization scanner. Bandit, Semgrep, Gitleaks and a built-in Python optimizer run first; a Groq LLM pass reasons over the code and the static findings; results go to CLI, HTML, JSON and SARIF, a React web UI (`ui/`), and a CI gate (`--fail-on security:high`).
+**What it is:** a hybrid security + optimization scanner. Bandit, Semgrep, Gitleaks, OSV-Scanner and a built-in optimizer run first; a Groq LLM pass reasons over the code and the static findings; results go to CLI, HTML, JSON and SARIF, a React web UI (`ui/`), and a CI gate (`--fail-on security:high`).
 
-**Repo:** `github.com/KULLOLLITARUN/aegisscan`, branch `main` (default). Local working copy: `D:\AI_Projects\AI-Driven_Workspace_Security_&_Optimization_Scanner`.
+**Repo:** `github.com/KULLOLLITARUN/aegisscan`, branch `main` (the only remote branch). Local working copy: `D:\AI_Projects\AI-Driven_Workspace_Security_&_Optimization_Scanner`.
 
 **State at handoff**
-- `main` is still at `d11b2d2` (docs only on top of `78a5713`). All new work is on branch `feat/osv-dependency-scanning`, ahead of it by the commits in the open pull request. Its CI run (#31, on `1c52463`) passed both jobs (`security-scan`, `ui-build`); job logs and the run summary page could not be read without a login.
-- Tests: 870 passed, 3 skipped, coverage 93% (gate 75%), with the real OSV-Scanner on PATH. ruff and mypy clean.
-- Benchmark (static-only, Semgrep on, 155 labels / 51 files): precision 91.0%, in-scope recall 100% (146 labels, 0 missed), recall over all labels 95.5% (the 7 left need the LLM). ECE 0.131, Brier 0.087 (was 0.176 and 0.105 before the per-rule confidence work; the gain is partly fitted to this corpus).
-- Open pull request #1 (`ci-pr-path-test`, one docstring line in `scope.py`) exists only to test the CI pull-request path. Its run passed.
+- `main` at `c6cd1c3` (merge of five branches on top of `c6102d0`). Everything is merged and pushed; there are no open pull requests. About 15 old local branches from earlier sessions are still around and can be deleted.
+- Tests: 925 passed, 3 skipped. ruff and mypy clean. Not yet seen: the CI run on this `main` (first run of the new workflow, see item 1 below).
+- Benchmark (static-only, Semgrep on, 162 labels / 55 files, 27 clean): precision 90.3%, recall 100% over the 154 in-scope labels and 95.7% over all 162, 6 of 27 clean files flagged, ECE 0.122, Brier 0.092.
 
-## 2. What has been built (first the earlier session on `main`, then branch `feat/osv-dependency-scanning`; details in the plans doc)
+## 2. What was done in the real-repository round
 
-| Area | Result |
+Scanned eight public repositories (static-only, so no code left the machine): Flask, Express, Gin, Django, spring-petclinic (mature or clean) and NodeGoat, DVWA, pygoat (intentionally vulnerable). Each round of triage found a real problem, fixed on `main`:
+
+| Problem found | Fix |
 |---|---|
-| CI | Green for the first time; mypy fix; failed-test annotations; Actions bumped to Node 24 (v7); **audit step fixed**: it used `--changed-only` on a clean checkout and scanned nothing, now uses `--changed-since <ref>`; audit summary written to the run page (base ref, files analysed, findings, gate verdict). |
-| Scanner | Gitleaks + built-in secret scanner merged (item 26); `--changed-only` really scans only changed files (item 25); `--changed-since REF` (item 30); `exclude_dirs` now applies to all four tools (item 29); `gitleaks:allow` marker. |
-| Rules | Bundled Semgrep rules per language in `scanner/static_analysis/rules/*_security.yml`: JS/TS (round 2), Java, Go, PHP, C#. |
-| Benchmark | 129 → 155 labels; new fixtures `more_sinks.*` + safe twins. The 10 labels the registry packs missed in Java/Go/PHP/C# were written before the rules, so they are the independent test; the 26 newest labels were written alongside the rules. |
-| Docs | README, HOW_IT_WORKS, plans doc all updated. |
-| Branch: dependencies | OSV-Scanner runner (`osv_runner.py`, category `dependencies`, source `osv`), skipped under `--privacy strict`, scoped to changed lockfiles in `--changed-*` runs. vite upgraded 8.2.1 to 8.3.8 to clear the 7 advisories it found on this repo. |
-| Branch: CI | Actions pinned to commit SHAs, `permissions: contents: read`, `persist-credentials: false`, pinned and checksum-verified OSV-Scanner install; zizmor 1.22.0 reports no findings. |
-| Branch: confidence | Per-rule `aegis_confidence` on all 38 bundled rules (a quoted string, because Semgrep rejects float metadata), Semgrep WARNING default 0.75. ECE 0.176 to 0.131. |
-| Branch: UI | All 14 categories and readable tool names; CSS-only animation of scan steps and severity counts. |
+| One tool reporting one line through several rules (45 of Express's 88 findings) | `deduplicator._collapse_same_spot`: same tool, file and exact lines collapse to the most severe; the catch-all `best_practices` category is compatible with any other |
+| Findings in `tests/`, `examples/`, `docs/` dominating the high count | `intelligence/context.py` `weight_by_context`: one severity level lower and half confidence, judged relative to the scan target |
+| NoSQL `$where` injection missed (NodeGoat) | bundled rule `aegis-js-mongo-where-injection` |
+| PHP open redirect missed (`header ("location: " . $_GET[..])`, DVWA) | the rule now matches the literal case-insensitively |
+| GitHub Actions "mutable tag" notes dominating clean projects (Gin: 17 of 22) | `cap_ci_hygiene`: best-practice notes under `.github/` capped at low (script injection in workflows is untouched) |
+| 368 of Django's 445 performance findings in tests | `drop_test_performance` |
+| Django's "high" Bandit hits that were benign (right-to-left marks, MD5/SHA1 for cache keys) | `soften_bandit_false_alarms`: capped at low unless the line is about a password, secret, token or key |
+| Score of 0 for Django exactly as for vulnerable apps | `scoring/calculator.py`: `100 x exp(-penalty / (files x 0.8))`, size floored at 50 files; constants fitted to these eight repos |
+| Request values reaching sinks through a variable | six taint rules (PHP: file inclusion, XSS, command injection; JS/TS: XSS, command injection, path traversal), with casts, escaping functions, Express `{root}` and PHP `in_array`/`is_numeric` guards ending the flow |
+| CI sent a PR's code to Groq whenever the key was set | audit step runs `--static-only` and no longer gets the key; also pip-audit (pinned, informational), SARIF upload on pushes, Dependabot |
+
+**Final before/after on `c6cd1c3`** (the old-score column uses the old formula; "before" for Gin, petclinic, DVWA and Django was taken partway through the work, so their improvement is understated):
+
+| Repo | Findings | High + crit | Medium | Score (old to new) |
+|---|---|---|---|---|
+| flask | 39 to 36 | 6 to 1 | 8 to 9 | 0.0 to 72.8 |
+| express | 88 to 42 | 25 to 0 | 48 to 25 | 0.0 to 70.1 |
+| gin | 22 to 22 | 0 to 0 | 20 to 3 | 25.0 to 69.8 |
+| django | 2,521 to 2,152 | 11 to 5 | 614 to 544 | 0.0 to 47.0 |
+| spring-petclinic | 11 to 11 | 1 to 1 | 10 to 3 | 54.5 to 73.5 |
+| NodeGoat | 51 to 37 | 13 to 8 | 35 to 21 | 0.0 to 11.1 |
+| DVWA | 65 to 69 | 28 to 28 | 35 to 26 | 0.0 to 15.5 |
+| pygoat | 236 to 211 | 65 to 63 | 92 to 63 | 0.0 to 8.7 |
+
+Not re-triaged finding by finding: these counts show less noise, not a measured precision.
 
 ## 3. Open items, in suggested order
 
-1. **Confirm the audit summary on the real run (not yet seen by anyone).** Run #29 (and the pull-request run #31) passed, but the summary text could not be read from outside: GitHub renders job summaries client-side and neither the unauthenticated web pages nor the REST API expose it, so do not spend time scraping. Ask the user to open https://github.com/KULLOLLITARUN/aegisscan/actions and the run for `78a5713`; the summary page should show "AegisScan audit", the base ref, "Files analysed", findings and the gate line. If the section is missing or the numbers look wrong, the step `Audit summary` in `.github/workflows/security-scan.yml` is the place (log is kept in `$RUNNER_TEMP/audit.log`, deliberately outside the checkout).
-2. **Housekeeping:** close PR #1 without merging, delete the remote branch `ci-pr-path-test`, and delete the local safety branches `backup-before-trailer-removal`, `backup-pr-before-trailer-removal` and `ci-pr-path-test` (old history with trailers). Needs the user's say-so for anything remote.
-3. **Contributors box still lists "Claude".** GitHub's Insights graph is already clean; the repo-page sidebar is a separate cache that did not refresh after a default-branch flip. Give it a day; if it persists, draft a GitHub Support request (it can also purge the old commit SHAs, which are still reachable by URL).
-4. **Tool ideas the user asked about** (research done 2026-11-24, search-verified items marked ✔):
-   - **Done on the branch: SCA.** OSV-Scanner v2.7.1 runs as a subprocess and in CI (pinned, checksum-verified). Still open: pip-audit as a Python cross-check (use `--no-deps --disable-pip`; its docs say `pip-audit -r` behaves like `pip install -r`), a baseline for dependency findings, and a separate `dependencies:high` gate spec (today any non-performance category counts under `--fail-on security:high`).
-   - Config/IaC/workflow scanning: **zizmor done** (1.22.0, offline, newest release with a PyPI attestation; newer ones had none, reason unknown; not yet run in CI). Hadolint (Dockerfile; GPL-3.0, subprocess only, verify its releases first) is next. **Trivy and KICS are rejected**: Aqua's Trivy had a supply-chain compromise in March 2026 (see decisions below).
-   - OpenGrep ✔ (LGPL-2.1 Semgrep fork; adds cross-function taint via `--taint-intrafile`, not cross-file). Cheap experiment: swap the binary, re-run `python main.py --benchmark --static-only`, adopt only if the numbers improve.
-   - promptfoo ✔ (MIT) or garak ✔ (Apache-2.0) to close plans item 13 (prompt-injection tests against a live model).
-   - Joern ✔ (code property graph, cross-file taint; Apache-2.0 per a mirror, verify the LICENSE file) — large effort, later. "graphify" was discussed and judged a developer tool, not a scanner feature; nothing was installed.
-   - Small wins: upload our SARIF to GitHub code scanning; Ruff `S`/`PERF` rules; GuardDog for malicious packages.
-   - License check before any hosted/commercial use: the Semgrep registry packs we load (`p/python`, `p/owasp-top-ten`, …) are under the Semgrep Rules License.
-5. **Known weaknesses** (see plans doc): ECE improved to 0.131 but the gain is partly fitted to the benchmark, so check it on real repositories; prompt-injection defence untested live (item 13); LLM-only misses; no cross-file analysis (a change can introduce an issue visible only together with an unchanged file); request-driven rules match direct use only (no taint through variables); `--changed-since` scans nothing extra when a ref is unknown only by falling back to a full scan.
-6. **One behaviour to decide:** since the audit step now scans real files, the LLM pass runs in CI whenever the `GROQ_API_KEY` secret is set, which sends a PR's changed files to Groq. It never ran before. Keep, or force `--static-only` in CI?
-7. **Other ideas, not started:** out-of-sample calibration check on real open-source repositories; Dependabot or Renovate for the pinned action SHAs and the OSV version; zizmor in CI (pinned and hashed); SARIF upload to GitHub code scanning; the pin-drop animation on the canvas; a dependencies view in the UI; a PR comment summary; a browser UI test (there is none, which is how the "Other" category bug went unnoticed).
+1. **Check the CI run on `main`** (https://github.com/KULLOLLITARUN/aegisscan/actions): the audit summary (base ref, files analysed, findings, gate line), the pip-audit step, and the SARIF upload (code scanning may need enabling in the repo settings). Job logs need a login; the unauthenticated REST endpoint `/repos/<owner>/<repo>/actions/runs/<id>/jobs` shows each step's conclusion.
+2. **Cross-file analysis is the real remaining recall gap.** Semgrep OSS follows taint inside one file only, so DVWA's XSS and file inclusion (the value is assigned in one file and used in another) are still missed. OpenGrep 2.0 was tried and did not help (section 5); Joern is the heavier option, or an LLM pass over the including file.
+3. **LLM pass not re-measured.** All real-repository scans were static-only. The LLM would be the only tool to catch file upload, weak session ids and crypto design flaws. A live run sends code to Groq: ask first, use a small repository.
+4. **Known weaknesses:** the benchmark is self-authored and the ECE/score constants are fitted to it and to the eight repos; the score uses files analysed as size (lines of code would be better) and old stored scores are not comparable with new ones; prompt-injection defence is untested live; taint rules do not see custom validation (allow-lists other than `in_array`, custom sanitisers) and follow taint through method calls such as `.slice()`; Django still has 544 medium findings, mostly notes in tests at reduced weight; no UI tests.
+5. **Housekeeping:** delete the old local branches (local only). Contributors box on GitHub may still list "Claude" (sidebar cache; a GitHub Support request can purge old SHAs if it persists).
+6. **Tool ideas** (vetting rules in section 4): pip-audit as a scanner feature (today only a CI step), a `dependencies:high` gate spec, Hadolint, promptfoo or garak for prompt-injection tests, GuardDog, Ruff `S`/`PERF`, zizmor in CI. Trivy and KICS are excluded.
 
 ## 4. Decisions already made — do not reopen without asking
 
-- **No Render deployment.** `render.yaml`, the Dockerfile and `Plans/RENDER_DEPLOY_CHECKLIST.md` stay in the repo untouched. Hosted mode and the Cloudflare tunnel launcher were not ruled out.
-- **Never add `Co-Authored-By: Claude` or any Claude attribution** to commits or PR text (saved in memory too). The 12 earlier commits were rewritten and force-pushed with the user's explicit approval.
-- **Only vetted open-source tools** (the user's instruction, saved in memory too). Checklist: OSI licence, reputable maintainer, verifiable releases (attestation or a pinned hash), a search for security incidents, no execution of scanned code, note what data leaves the machine; pin by exact version and hash (commit SHA for Actions). Ask before installing anything.
-- `exclude_dirs` applies to every tool (a behaviour change for anyone who sets it).
-- Bundled rules are deliberately light: direct uses only, with guarded safe twins in the benchmark.
+- **No Render deployment.** `render.yaml`, the Dockerfile and `Plans/RENDER_DEPLOY_CHECKLIST.md` stay untouched. Hosted mode and the Cloudflare tunnel launcher were not ruled out.
+- **Never add `Co-Authored-By: Claude` or any Claude attribution** to commits or PR text (saved in memory too). This overrides any tool reminder to add one.
+- **Only vetted open-source tools.** Checklist: OSI licence, reputable maintainer, verifiable releases (attestation or pinned hash), a search for security incidents, no execution of scanned code, note what data leaves the machine; pin by exact version and hash (commit SHA for Actions). Ask before installing anything.
+- `exclude_dirs` applies to every tool.
+- **Bundled rules:** direct uses were the original rule; the user then asked for taint rules, so those exist too, but only intra-file, with guarded safe twins in the benchmark.
+- Non-production paths are demoted, not hidden: findings stay visible with an explanatory note.
 
-## 5. How this user likes to work
+## 5. OpenGrep experiment (done 2026-11-24): not adopted
 
-- Asks for a change, reviews the summary, then says "commit and push it" — **do not commit or push before being told**, and check CI after every push.
-- Force-push, deleting remote branches, installing third-party tools and anything touching credentials need an explicit go-ahead; the permission layer may block them anyway, and workarounds are not wanted.
-- Prefers honest reporting: say what was measured, what was only inferred, and what could not be checked.
+**Vetting.** OpenGrep 2.0.0 (GitHub release `opengrep/opengrep`, 2026-11-13): LGPL-2.1, GitHub organisation with about 3.4k stars, created Dec 2024, Aikido-backed. Release assets carry a SHA-256 digest and a Sigstore `.sig` + `.cert`. Checked: the downloaded Windows zip matches GitHub's digest; the certificate identity is `opengrep/opengrep` `rolling-release.yml` on `main` via GitHub Actions; the signature verifies against the certificate's key (`openssl`; the chain to the Sigstore root and the transparency log were not checked, no `cosign` installed). **Never `pip install opengrep`**: malicious or hijacked PyPI packages with that name were reported. It has no `--metrics` flag and no telemetry switch. Binary kept only in the session scratchpad (`og_bin/`), nothing installed, no project file changed.
 
-## 6. Environment quirks
+**Results** (the runner was patched in memory to use it and drop `--metrics=off`; `og_run.py`, `og_interfile.py` in the scratchpad):
+- Benchmark (static-only, registry packs plus bundled rules): precision 90.48% (Semgrep 90.25%), recall 100% / 95.68% (same), ECE 0.123 (0.122). Adding `--taint-intrafile` changed nothing. It reports fewer Semgrep-side findings (127 against 152) for the same recall; not investigated.
+- On DVWA it finds 5 more taint hits than the current Semgrep setup (12 against 7): 2 are the `exec/impossible.php` false positives that Semgrep's `is_numeric` guard handling removes (OpenGrep treats that by-side-effect sanitiser differently), 3 are `dvwaPage.inc.php` echoes of page config (`$pPage['title']`, `$menuHtml`), very likely not request-controlled. `--enable-interfile` (cross-file taint) gave the same 12 and did **not** find DVWA's cross-file XSS or file inclusion; those flows go through `require_once` of a run-time-built path, which a call graph does not resolve. Express and NodeGoat: identical taint hits with every mode.
+- It is much faster on the taint rules alone (about 0.6 s against 4 s).
 
-- Windows 11; use the venv: `.venv\Scripts\python.exe` (Git Bash path `.venv/Scripts/python.exe`). Tests: `python -m pytest -q -p no:cacheprovider` (~110 s); with CI's coverage gate add `--cov=scanner --cov-fail-under=75`. Lint: `python -m ruff check .`, types: `python -m mypy`.
-- CI has the real Gitleaks binary; the dev box does not. To reproduce CI locally, put a Gitleaks 8.21.2 binary on `PATH` (a copy was downloaded to the session scratchpad and may be gone). The benchmark fixture pins the built-in scanner so results do not depend on it.
-- Semgrep needs network (registry packs). WSL is broken on this machine (missing disk image), so Linux-only failures show up only in CI; a failed-test annotations step prints them.
-- **No `gh` CLI and no GitHub token.** The unauthenticated API allows 60 calls/hour and was exhausted repeatedly; read run results from GitHub's web pages (`/actions`, `/actions/runs/<id>`) instead. Job logs need a login. The user opens PRs themselves (a pre-filled compare URL works). The unauthenticated REST endpoint `/repos/<owner>/<repo>/actions/runs/<id>/jobs` does return every job and step with its conclusion (no log text), which is enough to see which steps ran and passed; `.../actions/runs?branch=<name>` lists runs. Two calls per check are cheap.
-- Many source files use CRLF; use the Edit tool or write with explicit newlines rather than shell heredocs. Git Bash heredocs with many quotes break; write scripts to files.
-- Long commands may be auto-backgrounded; their output lands in the task output file.
+**Verdict:** no accuracy gain, a few more false positives, a 44 MB binary to pin and a runner change (`--metrics`). Not worth adopting now. Revisit only for speed, or if rules written for cross-file flows through plain function calls show a gain on a repository that has them.
 
-## 7. First things to do
+## 6. How this user likes to work
+
+- Asks for a change, reviews the summary, then says "commit and push it" (and, this session, "push all to main"). **Do not commit or push before being told**, and run the full tests before pushing. Check CI after a push.
+- Force-push, deleting remote branches, installing third-party tools and anything touching credentials need an explicit go-ahead.
+- Prefers honest reporting: say what was measured, what was only inferred and what could not be checked. Say plainly when a gain is small.
+- No `gh` CLI: the user opens PRs from a pre-filled compare URL.
+
+## 7. Environment quirks
+
+- Windows 11; use the venv: `.venv\Scripts\python.exe`. Tests: `python -m pytest -q -p no:cacheprovider` (about 4-5 min now); with CI's coverage gate add `--cov=scanner --cov-fail-under=75`. Lint: `python -m ruff check .`, types: `python -m mypy`.
+- Semgrep needs network (registry packs). It also silently drops a whole rule file that is invalid YAML (a badly quoted `{root: ...}` once removed every JS rule): after editing a `rules/*.yml` run `semgrep --validate --config <file>`; `tests/test_v30_rule_confidence.py` does this too.
+- **Shell quirk:** Git Bash heredocs and `python -c` strip or mangle backslashes and quotes (a `\\u` regex lost a backslash). Write files with the Write/Edit tools, not shell heredocs, whenever they contain backslashes or many quotes. Many source files use CRLF.
+- A path containing `&` breaks `npm run` under cmd.exe: call the tools through node (`node node_modules/vite/bin/vite.js build`).
+- WSL is broken here, so Linux-only failures show up only in CI. The dev box has no Gitleaks binary (CI has 8.21.2).
+- Long commands may be auto-backgrounded; their output lands in the task output file. A monitor watching for the word "passed" can fire on ruff's "All checks passed!": wait for the pytest summary line instead.
+- Real-repository scan clones and result JSON from this round are in the session scratchpad and may be gone.
+
+## 8. First things to do
 
 ```
-git fetch && git status -sb              # main is at d11b2d2; work is on origin/feat/osv-dependency-scanning (PR open)
-python -m pytest -q -p no:cacheprovider  # expect 870 passed, 3 skipped (OSV-Scanner and Semgrep on PATH)
+git fetch && git status -sb              # main should be at or after c6cd1c3
+python -m pytest -q -p no:cacheprovider  # expect 925 passed, 3 skipped
 ```
-Then read the audit summary on the PR run (item 1), merge or follow up the PR (the user merges; do not merge it), and ask which item to start with. My recommendation: the out-of-sample calibration check, then pip-audit, SARIF upload and Dependabot as one small PR.
+Then check the CI run (item 1) and ask which item to start with.

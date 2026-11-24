@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# Least privilege: every job only reads the repository. (upload-artifact uses the runner's own
+# token, not GITHUB_TOKEN, so it needs no extra permission.)
+permissions:
+  contents: read
+
 jobs:
   security-scan:
     runs-on: ubuntu-latest
@@ -14,6 +19,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -129,6 +135,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

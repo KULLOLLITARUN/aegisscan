@@ -14,6 +14,9 @@ permissions:
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # only to upload the SARIF report to code scanning
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,6 +51,9 @@ jobs:
           rm osv-scanner
           osv-scanner --version
 
+      - name: Install pip-audit
+        run: pip install pip-audit==2.10.1   # PyPA, Apache-2.0; pinned
+
       - name: Lint (ruff)
         run: ruff check .
 
@@ -67,7 +73,6 @@ jobs:
 
       - name: Run AegisScan Security Audit
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           BEFORE_SHA: ${{ github.event.before }}
@@ -86,11 +91,12 @@ jobs:
             BASE="HEAD~1"
           fi
           echo "Scanning files changed since $BASE"
+          # Static-only on purpose: CI never sends a pull request's code to an LLM provider.
           echo "AUDIT_BASE=$BASE" >> "$GITHUB_ENV"
           # Keep the console output for the summary below, outside the checkout so it is not itself scanned
           # as a changed file; pipefail keeps the gate's exit code (2).
           set -o pipefail
-          python main.py . --changed-since "$BASE" --fail-on security:high --html aegisscan-report.html --privacy redact 2>&1 | tee "$RUNNER_TEMP/audit.log"
+          python main.py . --changed-since "$BASE" --static-only --fail-on security:high --html aegisscan-report.html --sarif aegisscan.sarif --privacy redact 2>&1 | tee "$RUNNER_TEMP/audit.log"
 
       - name: Audit summary
         if: always()
@@ -118,12 +124,29 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Python dependency audit (pip-audit)
+        # Cross-checks the installed Python packages against the PyPI advisory database.
+        # Informational: a new advisory should not block unrelated work.
+        continue-on-error: true
+        run: pip-audit --progress-spinner off --desc off
+
+      - name: Upload SARIF to code scanning
+        # Not on pull requests: those from forks get a read-only token.
+        if: always() && github.event_name == 'push' && hashFiles('aegisscan.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: aegisscan.sarif
+          category: aegisscan
+
       - name: Upload HTML Security Report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: aegisscan-report
-          path: aegisscan-report.html
+          path: |
+            aegisscan-report.html
+            aegisscan.sarif
 
   ui-build:
     # The React build output (scanner/server/dist) is not committed. Build it here so a broken

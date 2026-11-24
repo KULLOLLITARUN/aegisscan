@@ -1,0 +1,15 @@
+# Keeps the SHA-pinned Actions, the Python packages and the UI packages current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: weekly

@@ -133,7 +133,25 @@ def _pick_best(cluster: list[Finding]) -> Finding:
         for f in ranked[1:]:
             if f.rule_source != "llm" and f.confidence >= best.confidence - STATIC_LOCATION_MARGIN:
                 return f
+        return _bound_llm_severity(best, cluster)
     return best
+
+
+def _bound_llm_severity(llm: Finding, cluster: list[Finding]) -> Finding:
+    """An LLM finding that wins a cluster on confidence does not also inherit a higher severity.
+
+    Found live on Gin: the model rated `unsafe` string conversion high at 0.95 and, being more
+    confident than Semgrep's 0.75 note on the same lines, replaced Semgrep's medium with its own
+    high. When a static tool flagged the same spot, its severity is the ceiling, except for
+    categories where the model may be telling us something the tool cannot (injection, XSS, ...).
+    """
+    static = [f for f in cluster if f.rule_source != "llm"]
+    if not static or llm.category in _HIGH_IMPACT_LLM_CATEGORIES:
+        return llm
+    ceiling = max((f.severity for f in static), key=lambda s: _SEVERITY_RANK.get(s.value, 0))
+    if _SEVERITY_RANK.get(llm.severity.value, 0) <= _SEVERITY_RANK.get(ceiling.value, 0):
+        return llm
+    return llm.model_copy(update={"severity": ceiling})
 
 
 _SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}

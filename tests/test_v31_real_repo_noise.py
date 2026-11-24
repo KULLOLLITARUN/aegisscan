@@ -227,3 +227,32 @@ def test_llm_findings_that_say_more_than_a_catch_all_note_are_kept() -> None:
     # a static finding that is not the catch-all category does not absorb it either
     other = _f(path="a.js", line=10, category="crypto", source="semgrep")
     assert len(deduplicate([other, _llm("a.js", line=10)])[0]) == 2
+
+
+# ---- severity inflation: a more confident LLM must not also raise the static tool's severity ----
+
+def test_confident_llm_keeps_the_static_severity_ceiling() -> None:
+    static = _f(path="a.go", line=14, category="best_practices", severity=Severity.MEDIUM, conf=0.75, source="semgrep")
+    model = _f(path="a.go", line=14, category="best_practices", severity=Severity.HIGH, conf=0.95, source="llm")
+    kept, _ = deduplicate([static, model])
+    assert len(kept) == 1
+    assert kept[0].rule_source == "llm" and kept[0].confidence == 0.95    # the model's text and confidence stay
+    assert kept[0].severity == Severity.MEDIUM                            # but not its inflated severity
+
+
+def test_llm_severity_is_never_raised_and_injection_is_exempt() -> None:
+    low_model = _f(path="a.go", category="best_practices", severity=Severity.LOW, conf=0.95, source="llm")
+    high_static = _f(path="a.go", category="best_practices", severity=Severity.HIGH, conf=0.5, source="semgrep")
+    assert deduplicate([high_static, low_model])[0][0].severity == Severity.LOW
+
+    sqli = _f(path="a.go", category="injection", severity=Severity.CRITICAL, conf=0.95, source="llm")
+    note = _f(path="a.go", category="injection", severity=Severity.LOW, conf=0.5, source="semgrep")
+    assert deduplicate([note, sqli])[0][0].severity == Severity.CRITICAL
+
+
+def test_llm_alone_and_close_static_confidence_behave_as_before() -> None:
+    alone = _f(path="a.go", category="best_practices", severity=Severity.HIGH, conf=0.95, source="llm")
+    assert deduplicate([alone])[0] == [alone]
+    static = _f(path="a.go", category="best_practices", severity=Severity.MEDIUM, conf=0.90, source="semgrep")
+    model = _f(path="a.go", category="best_practices", severity=Severity.HIGH, conf=0.95, source="llm")
+    assert deduplicate([static, model])[0][0].rule_source == "semgrep"     # within the 0.10 location margin

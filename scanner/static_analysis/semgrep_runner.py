@@ -51,7 +51,7 @@ _SEMGREP_SEVERITY_MAP: dict[str, Severity] = {
 
 _SEMGREP_CONFIDENCE: dict[str, float] = {
     "ERROR":   0.80,
-    "WARNING": 0.65,
+    "WARNING": 0.75,   # was 0.65; the benchmark showed WARNING findings correct ~90% of the time
     "INFO":    0.50,
 }
 
@@ -211,6 +211,27 @@ def _run_semgrep_once(cmd: list[str]) -> list[Finding]:
     return findings
 
 
+def _rule_confidence(metadata: object) -> float | None:
+    """A rule's own ``aegis_confidence`` (bundled rules set it), or None to use the severity default.
+
+    Rubric for bundled rules, by the shape of the rule and not by benchmark results: 0.90 unsafe by
+    construction or a visible request source; 0.85 a dangerous sink guarded to non-literal
+    arguments; 0.80 request-driven or name-based weak crypto; 0.70 a sink whose argument may or may
+    not be attacker-controlled (no taint tracking).
+    """
+    if not isinstance(metadata, dict):
+        return None
+    # Stored as a quoted string ("0.85") because Semgrep's rule loader rejects float metadata values.
+    value = metadata.get("aegis_confidence")
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    return number if 0.0 < number <= 1.0 else None
+
+
 def _normalize(item: dict) -> Finding:
     meta  = item.get("extra", {})
     sev   = meta.get("severity", "INFO").upper()
@@ -222,7 +243,7 @@ def _normalize(item: dict) -> Finding:
         issue_type=meta.get("message", "Semgrep finding")[:120],
         category=meta.get("metadata", {}).get("aegis_category") or _infer_category(item.get("check_id", "")),
         severity=_SEMGREP_SEVERITY_MAP.get(sev, Severity.INFO),
-        confidence=_SEMGREP_CONFIDENCE.get(sev, 0.50),
+        confidence=_rule_confidence(meta.get("metadata")) or _SEMGREP_CONFIDENCE.get(sev, 0.50),
         line_start=int(start.get("line", 1)),
         line_end=int(end.get("line", start.get("line", 1))),
         evidence=meta.get("lines", "").strip(),

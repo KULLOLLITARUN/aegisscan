@@ -1,4 +1,4 @@
-import { SEVERITY_LABEL, CATEGORY_LABEL, normSeverity, normCategory } from '../../constants'
+import { SEVERITY_LABEL, CATEGORY_LABEL, normSeverity, normCategory, sourceLabel } from '../../constants'
 import { relPath } from '../../lib/paths'
 
 /**
@@ -38,7 +38,7 @@ export default function FindingTable({ findings, target, selectedId, onSelect, s
                 </td>
                 <td>{CATEGORY_LABEL[normCategory(f.category)]}</td>
                 <td className="ag-mono ag-loc">{showFile ? `${relPath(f.file_path, target)}:${f.line_start}` : f.line_start}</td>
-                <td>{f.rule_source}</td>
+                <td>{sourceLabel(f.rule_source)}</td>
                 <td className="ag-right ag-mono">{pct}%</td>
               </tr>
             )

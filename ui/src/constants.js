@@ -15,11 +15,21 @@ export const SEVERITY_LABEL = {
   info: 'Info',
 }
 
+// Every category the scanner can emit. The static tools and bundled rules produce more than the
+// LLM's seven (xss, path_traversal, ... and dependencies from OSV-Scanner); a category missing here
+// is folded into "Other", which hid them from the Findings filter.
 export const CATEGORIES = [
   'injection',
+  'xss',
+  'path_traversal',
+  'redirect',
+  'deserialization',
   'secrets',
+  'dependencies',
   'access_control',
+  'network',
   'crypto',
+  'misconfig',
   'performance',
   'best_practices',
   'other',
@@ -27,12 +37,34 @@ export const CATEGORIES = [
 
 export const CATEGORY_LABEL = {
   injection: 'Injection',
+  xss: 'Cross-site scripting',
+  path_traversal: 'Path traversal',
+  redirect: 'Open redirect',
+  deserialization: 'Deserialization',
   secrets: 'Secrets',
+  dependencies: 'Vulnerable dependencies',
   access_control: 'Access Control',
+  network: 'Network',
   crypto: 'Crypto',
+  misconfig: 'Misconfiguration',
   performance: 'Performance',
   best_practices: 'Best Practices',
   other: 'Other',
+}
+
+// `rule_source` is an internal id; show the tool's real name.
+export const SOURCE_LABEL = {
+  bandit: 'Bandit',
+  semgrep: 'Semgrep',
+  gitleaks: 'Secret scan',
+  osv: 'OSV-Scanner',
+  'aegis-opt': 'Optimizer',
+  llm: 'AI review',
+  correlated: 'Static + AI',
+}
+
+export function sourceLabel(source) {
+  return SOURCE_LABEL[source] || source || 'Unknown'
 }
 
 /** Normalizes whatever the API sends (case, missing value) to a known severity key. */

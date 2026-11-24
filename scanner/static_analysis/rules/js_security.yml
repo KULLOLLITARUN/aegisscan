@@ -6,7 +6,7 @@ rules:
     languages: [javascript, typescript]
     severity: ERROR
     message: "eval() of a non-literal value allows arbitrary code execution"
-    metadata: {aegis_category: injection}
+    metadata: {aegis_category: injection, aegis_confidence: "0.85"}
     patterns:
       - pattern: eval($X)
       - pattern-not: eval("...")
@@ -15,7 +15,7 @@ rules:
     languages: [javascript, typescript]
     severity: ERROR
     message: "new Function() built from a non-literal value allows arbitrary code execution"
-    metadata: {aegis_category: injection}
+    metadata: {aegis_category: injection, aegis_confidence: "0.85"}
     patterns:
       - pattern-either:
           - pattern: new Function(..., $X)
@@ -27,7 +27,7 @@ rules:
     languages: [javascript, typescript]
     severity: ERROR
     message: "vm code execution is not a security boundary; a non-literal script allows code execution"
-    metadata: {aegis_category: injection}
+    metadata: {aegis_category: injection, aegis_confidence: "0.85"}
     patterns:
       - pattern-either:
           - pattern: $VM.runInNewContext($X, ...)
@@ -44,7 +44,7 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     message: "document.write() with a non-literal value can inject unsanitised HTML (XSS)"
-    metadata: {aegis_category: xss}
+    metadata: {aegis_category: xss, aegis_confidence: "0.70"}
     patterns:
       - pattern-either:
           - pattern: document.write($X)
@@ -60,7 +60,7 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     message: "Assigning a non-literal value to innerHTML/outerHTML can inject unsanitised HTML (XSS)"
-    metadata: {aegis_category: xss}
+    metadata: {aegis_category: xss, aegis_confidence: "0.70"}
     patterns:
       - pattern-either:
           - pattern: $EL.innerHTML = $X
@@ -87,7 +87,7 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     message: "A function parameter is joined into a filesystem path and read without a containment check (path traversal)"
-    metadata: {aegis_category: path_traversal}
+    metadata: {aegis_category: path_traversal, aegis_confidence: "0.70"}
     pattern: |
       function $F(..., $A, ...) {
         ...
@@ -100,7 +100,7 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     message: "insertAdjacentHTML() with a non-literal value can inject unsanitised HTML (XSS)"
-    metadata: {aegis_category: xss}
+    metadata: {aegis_category: xss, aegis_confidence: "0.70"}
     patterns:
       - pattern: $EL.insertAdjacentHTML($POS, $X)
       - pattern-not: $EL.insertAdjacentHTML($POS, "...")
@@ -112,7 +112,7 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     message: "jQuery .html() with a non-literal value can inject unsanitised HTML (XSS); use .text() or sanitise first"
-    metadata: {aegis_category: xss}
+    metadata: {aegis_category: xss, aegis_confidence: "0.70"}
     patterns:
       - pattern-either:
           - pattern: $(...).html($X)
@@ -127,7 +127,7 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     message: "dangerouslySetInnerHTML with a non-literal value can inject unsanitised HTML (XSS); sanitise it first"
-    metadata: {aegis_category: xss}
+    metadata: {aegis_category: xss, aegis_confidence: "0.70"}
     patterns:
       - pattern: '<$C ... dangerouslySetInnerHTML={{__html: $X}} ... />'
       - pattern-not: '<$C ... dangerouslySetInnerHTML={{__html: "..."}} ... />'
@@ -140,7 +140,7 @@ rules:
     languages: [javascript, typescript]
     severity: ERROR
     message: "setTimeout/setInterval given a string (or a value named like code) evaluates it like eval()"
-    metadata: {aegis_category: injection}
+    metadata: {aegis_category: injection, aegis_confidence: "0.85"}
     patterns:
       - pattern-either:
           - pattern: $T("..." + $X, ...)
@@ -160,7 +160,7 @@ rules:
     languages: [javascript, typescript]
     severity: ERROR
     message: "SQL built by string concatenation/interpolation is injectable; use placeholders (?, $1) and pass values separately"
-    metadata: {aegis_category: injection}
+    metadata: {aegis_category: injection, aegis_confidence: "0.85"}
     patterns:
       - pattern: $DB.$M($ARG, ...)
       - metavariable-regex:
@@ -175,7 +175,7 @@ rules:
     languages: [javascript, typescript]
     severity: WARNING
     message: "A request value reaches a filesystem path without a containment check (path traversal)"
-    metadata: {aegis_category: path_traversal}
+    metadata: {aegis_category: path_traversal, aegis_confidence: "0.80"}
     patterns:
       - pattern-either:
           - pattern: $RES.sendFile(<... $REQ.$P.$K ...>)

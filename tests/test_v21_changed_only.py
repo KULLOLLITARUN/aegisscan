@@ -41,7 +41,7 @@ def fake_tools(request, monkeypatch):
     """
     honour = request.param == "tools_honour_scope"
 
-    def run_all_tools(target: Path, progress=None, only_files=None):
+    def run_all_tools(target: Path, progress=None, only_files=None, privacy="standard"):
         if honour and only_files is not None:
             paths = sorted(Path(f) for f in only_files if str(f).endswith(".py"))
         else:

@@ -15,7 +15,7 @@ from tests.test_v13_coverage import _events, _fake_result
 
 def _fast_tools(monkeypatch) -> None:
     """Replace run_all_tools with a stub that still reports per-tool progress."""
-    def fake(target, progress=None, only_files=None):
+    def fake(target, progress=None, only_files=None, privacy="standard"):
         for name in ("Bandit", "Semgrep"):
             if progress:
                 progress(name)
@@ -56,12 +56,12 @@ def test_run_survives_a_failing_progress_callback(tmp_path: Path, monkeypatch) -
 
 
 def test_run_all_tools_reports_each_tool(tmp_path: Path, monkeypatch) -> None:
-    for name in ("run_bandit", "run_semgrep", "run_gitleaks"):
+    for name in ("run_bandit", "run_semgrep", "run_gitleaks", "run_osv"):
         monkeypatch.setattr(runner, name, lambda *a, **k: [])
     monkeypatch.setattr(runner, "run_optimizer", lambda *a, **k: [])
     seen: list[str] = []
     runner.run_all_tools(tmp_path, progress=seen.append)
-    assert seen == ["Bandit", "Semgrep", "Gitleaks", "Optimizer"]
+    assert seen == ["Bandit", "Semgrep", "Gitleaks", "OSV-Scanner", "Optimizer"]
 
 
 def test_auditor_reports_per_chunk_progress(monkeypatch) -> None:

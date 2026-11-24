@@ -48,6 +48,7 @@ _SOURCE_PRIORITY: dict[str, int] = {
     "semgrep":  2,
     "gitleaks": 3,
     "aegis-opt": 4,
+    "osv":      5,
 }
 
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { SEVERITY_LABEL, CATEGORY_LABEL, normSeverity, normCategory } from '../../constants'
+import { SEVERITY_LABEL, CATEGORY_LABEL, normSeverity, normCategory, sourceLabel } from '../../constants'
 import { relPath } from '../../lib/paths'
 import { highlight, parseDiff } from './highlight.jsx'
 
@@ -61,7 +61,7 @@ export default function Evidence({ finding, result, scanning }) {
       <div className="ag-facts">
         <div>Confidence<b>{Math.round((finding.confidence ?? 0) * 100)}%</b></div>
         <div>Location<b>{loc}</b></div>
-        <div>Source<b>{finding.rule_source}</b></div>
+        <div>Source<b>{sourceLabel(finding.rule_source)}</b></div>
       </div>
       {finding.explanation && <p>{finding.explanation}</p>}
       <div>

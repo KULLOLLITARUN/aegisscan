@@ -222,7 +222,7 @@ def test_changed_only_run_passes_just_the_changed_files_to_the_tools(tmp_path: P
     (tmp_path / "changed.py").write_text(_VULN + "# touched\n")
     scopes: list[object] = []
 
-    def fake(target, progress=None, only_files=None):
+    def fake(target, progress=None, only_files=None, privacy="standard"):
         scopes.append(None if only_files is None else sorted(Path(f).name for f in only_files))
         return [], []
 

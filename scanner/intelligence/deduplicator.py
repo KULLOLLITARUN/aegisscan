@@ -136,15 +136,59 @@ def _pick_best(cluster: list[Finding]) -> Finding:
     return best
 
 
+_SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+
+
+def _same_spot(a: Finding, b: Finding) -> bool:
+    """Same tool, same file, same exact lines, and compatible categories.
+
+    One tool often reports one line through several rules (eval flagged as injection and as
+    two "best practice" rules; nine session-cookie settings on one `session({...})` call).
+    The catch-all "best_practices" category is compatible with any other, because the registry
+    rules that land there are really the same sink under a vaguer name.
+    """
+    if (a.file_path, a.line_start, a.line_end, a.rule_source) != (
+        b.file_path, b.line_start, b.line_end, b.rule_source,
+    ):
+        return False
+    return a.category == b.category or "best_practices" in (a.category, b.category)
+
+
+def _collapse_same_spot(findings: list[Finding]) -> list[Finding]:
+    """Keep one finding per (tool, exact lines); the most severe, then most confident, wins."""
+    groups: list[list[Finding]] = []
+    index: dict[tuple, list[list[Finding]]] = {}
+    for f in findings:
+        key = (f.file_path, f.line_start, f.line_end, f.rule_source)
+        for g in index.get(key, []):
+            if _same_spot(g[0], f):
+                g.append(f)
+                break
+        else:
+            g = [f]
+            groups.append(g)
+            index.setdefault(key, []).append(g)
+
+    def rank(f: Finding) -> tuple[int, float, bool]:
+        # A specific category beats the catch-all when severity and confidence tie.
+        return (_SEVERITY_RANK.get(f.severity.value, 0), f.confidence, f.category != "best_practices")
+
+    return [max(g, key=rank) if len(g) > 1 else g[0] for g in groups]
+
+
 def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
     """
     Remove near-duplicate findings and return (deduped_list, n_suppressed).
 
     Algorithm: greedy clustering — each finding is assigned to the first
-    existing cluster it overlaps with. The best finding per cluster is kept.
+    existing cluster it overlaps with. The best finding per cluster is kept. Before that, several
+    rules of one tool on the same exact lines collapse into the most severe one.
     """
     if not findings:
         return [], 0
+
+    total = len(findings)
+    findings = _collapse_same_spot(findings)
 
     # Cluster findings
     clusters: list[list[Finding]] = []
@@ -168,7 +212,7 @@ def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
 
         kept.append(_pick_best(cluster))
 
-    n_suppressed = len(findings) - len(kept)
+    n_suppressed = total - len(kept)
     if n_suppressed:
         log.info("Deduplicator: removed %d duplicate finding(s)", n_suppressed)
 

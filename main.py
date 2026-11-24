@@ -38,6 +38,7 @@ from scanner.ingestion.classifier import FileClassifier
 from scanner.ingestion.crawler import WorkspaceCrawler
 from scanner.ingestion.git_diff import get_changed_files
 from scanner.intelligence.baseline import BaselineManager, save_baseline
+from scanner.intelligence.context import weight_by_context
 from scanner.intelligence.correlator import CorrelationGroup, correlate
 from scanner.intelligence.deduplicator import deduplicate
 from scanner.llm.auditor import SUPPRESSION_THRESHOLD, LLMAuditor
@@ -402,6 +403,7 @@ def run(
     # ---- 6. Deduplicate ----
     _progress("Deduplicating and scoring", 90)
     deduped, n_deduped = deduplicate(all_raw_findings)
+    deduped, _ = weight_by_context(deduped, path)
 
     # ---- 7. Correlate ----
     correlated, groups = correlate(deduped)

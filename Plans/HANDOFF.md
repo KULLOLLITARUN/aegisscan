@@ -1,6 +1,6 @@
 # AegisScan — handoff for the next session
 
-_Updated 2026-11-24 after the real-repository round. Read this first, then `Plans/REMAINING_ISSUES_AND_TESTING.md` (the detailed issue list and fixed-items table) and `HOW_IT_WORKS.md`._
+_Updated 2026-11-25 after the real-repository round and two live LLM runs. Read this first, then `Plans/REMAINING_ISSUES_AND_TESTING.md` (the detailed issue list and fixed-items table) and `HOW_IT_WORKS.md`._
 
 ## 1. Snapshot
 
@@ -9,8 +9,8 @@ _Updated 2026-11-24 after the real-repository round. Read this first, then `Plan
 **Repo:** `github.com/KULLOLLITARUN/aegisscan`, branch `main` (the only remote branch). Local working copy: `D:\AI_Projects\AI-Driven_Workspace_Security_&_Optimization_Scanner`.
 
 **State at handoff**
-- `main` at `c6cd1c3` (merge of five branches on top of `c6102d0`). Everything is merged and pushed; there are no open pull requests. About 15 old local branches from earlier sessions are still around and can be deleted.
-- Tests: 925 passed, 3 skipped. ruff and mypy clean. Not yet seen: the CI run on this `main` (first run of the new workflow, see item 1 below).
+- `main` at `99cd872`; everything is merged and pushed, and every merged branch is deleted (local has only `main`; the only other remote branch is Dependabot's). Open on GitHub: five Dependabot npm PRs (#4 to #8) from before the update grouping; the user closes them with `@dependabot close`, after which one grouped weekly PR per ecosystem replaces them.
+- Tests: 935 passed, 3 skipped. ruff and mypy clean. Not yet seen: the CI run on `main` (first run of the new workflow, see item 1 below).
 - Benchmark (static-only, Semgrep on, 162 labels / 55 files, 27 clean): precision 90.3%, recall 100% over the 154 in-scope labels and 95.7% over all 162, 6 of 27 clean files flagged, ECE 0.122, Brier 0.092.
 
 ## 2. What was done in the real-repository round
@@ -45,13 +45,32 @@ Scanned eight public repositories (static-only, so no code left the machine): Fl
 
 Not re-triaged finding by finding: these counts show less noise, not a measured precision.
 
+## 2b. Live LLM runs (2026-11-24/25): Gin and NodeGoat
+
+Both ran with the default selective trigger, `--privacy standard`, model `openai/gpt-oss-20b` with Groq failing over to `gpt-oss-120b` and `qwen3.8-27b`. Public code only, with the user's go-ahead each time. Cost: Gin 10 requests / 74 s / 5 rate-limit failovers; NodeGoat 41 requests / 259 s / 43 failovers and 16 empty responses (Groq's free tier throttles hard; expect slow runs).
+
+| Repo | Static-only | With the LLM, before the fixes | What the LLM added |
+|---|---|---|---|
+| Gin (clean) | 22 findings, score 69.8 | 37 findings, score 27.1 | nothing real: re-reported the workflow notes as `access_control`/`secrets` at confidence 1.00 (seven "high"), plus a high-rated `unsafe` conversion that is deliberate |
+| NodeGoat (vulnerable) | 37 findings, score 11.1 | 67 findings, score 1.8 | 4 real, design-level findings static rules cannot express: session fixation (`session.js:116`, high), XSS through the fetched body (`research.js:24`), the `/allocations/:userId` access-control gap (`index.js:63`), user enumeration (`session.js:78`, location points at a comment); about 16 more were noise |
+
+Verdict: useful as an opt-in second opinion on code with design-level bugs, net-negative on clean code. Fixes on `main` (all post-processing, replayed offline on the saved runs, not re-run live; the model's output varies between runs):
+
+- `cap_ci_hygiene` also caps LLM findings under `.github/` in any non-injection category at low severity and 0.5 confidence.
+- `deduplicator._drop_llm_echoes`: an LLM finding that re-labels a static `best_practices` note on the same lines is dropped, unless its category is injection, xss, deserialization or path_traversal.
+- `deduplicator._bound_llm_severity`: when a more confident LLM finding wins a cluster, it keeps its text and confidence but not a higher severity than the static finding (same high-impact exemption).
+- `context.soften_llm_noise`: LLM best-practice or performance findings whose short title is a code-quality remark ("missing error handling", "undefined variable", "radix", "zero-based"...), and any LLM finding in developer tooling (`artifacts/`, `scripts/`, `tools/`, `tasks/`, `build/`, `ci/`, `Gruntfile.js`, `gulpfile.js`), are capped at low and 0.5. Heuristic, tuned on these two repositories.
+- Replay: Gin with the LLM scores 67.8 (static-only 69.8) with no high finding; on NodeGoat 18 findings were capped and the real ones kept their severity.
+
+Still missed by the LLM on NodeGoat: the `$where` NoSQL injection (the static rule catches it), ReDoS in `profile.js` (neither tool reports it, unconfirmed), CSRF. Still noisy: the `tutorial.js` "arbitrary file read" (the page name comes from a fixed list) and an `eval` example in a tutorial HTML page.
+
 ## 3. Open items, in suggested order
 
 1. **Check the CI run on `main`** (https://github.com/KULLOLLITARUN/aegisscan/actions): the audit summary (base ref, files analysed, findings, gate line), the pip-audit step, and the SARIF upload (code scanning may need enabling in the repo settings). Job logs need a login; the unauthenticated REST endpoint `/repos/<owner>/<repo>/actions/runs/<id>/jobs` shows each step's conclusion.
 2. **Cross-file analysis is the real remaining recall gap.** Semgrep OSS follows taint inside one file only, so DVWA's XSS and file inclusion (the value is assigned in one file and used in another) are still missed. OpenGrep 2.0 was tried and did not help (section 5); Joern is the heavier option, or an LLM pass over the including file.
-3. **LLM pass not re-measured.** All real-repository scans were static-only. The LLM would be the only tool to catch file upload, weak session ids and crypto design flaws. A live run sends code to Groq: ask first, use a small repository.
+3. **LLM pass: measured on two repositories only** (section 2b). Not yet tried: DVWA (file upload, weak session ids and crypto design flaws are the kind of thing only the LLM can catch there), `--deep`, or a larger repository. A live run sends code to Groq: ask first, use a small public repository, and re-run the saved-run replay (rebuild the pre-dedup input from the static-only scan plus the LLM findings) rather than paying for a second run when only post-processing changed.
 4. **Known weaknesses:** the benchmark is self-authored and the ECE/score constants are fitted to it and to the eight repos; the score uses files analysed as size (lines of code would be better) and old stored scores are not comparable with new ones; prompt-injection defence is untested live; taint rules do not see custom validation (allow-lists other than `in_array`, custom sanitisers) and follow taint through method calls such as `.slice()`; Django still has 544 medium findings, mostly notes in tests at reduced weight; no UI tests.
-5. **Housekeeping:** delete the old local branches (local only). Contributors box on GitHub may still list "Claude" (sidebar cache; a GitHub Support request can purge old SHAs if it persists).
+5. **Housekeeping:** close Dependabot PRs #4 to #8 (the user does this on GitHub). Contributors box on GitHub may still list "Claude" (sidebar cache; a GitHub Support request can purge old SHAs if it persists).
 6. **Tool ideas** (vetting rules in section 4): pip-audit as a scanner feature (today only a CI step), a `dependencies:high` gate spec, Hadolint, promptfoo or garak for prompt-injection tests, GuardDog, Ruff `S`/`PERF`, zizmor in CI. Trivy and KICS are excluded.
 
 ## 4. Decisions already made — do not reopen without asking
@@ -76,7 +95,8 @@ Not re-triaged finding by finding: these counts show less noise, not a measured 
 
 ## 6. How this user likes to work
 
-- Asks for a change, reviews the summary, then says "commit and push it" (and, this session, "push all to main"). **Do not commit or push before being told**, and run the full tests before pushing. Check CI after a push.
+- Asks for a change, reviews the summary, then says "push to main" (or "push to main once tests pass"). Late in the 2026-11-25 session they said "don't push as PR": the default is now a direct push to `main`, not a branch and pull request. **Do not commit or push before being told**, and run the full tests before pushing. Check CI after a push.
+- Run `git branch -d` on merged branches only after checking they are merged into `main`; the user asked for merged branches to be deleted and a clean local repo.
 - Force-push, deleting remote branches, installing third-party tools and anything touching credentials need an explicit go-ahead.
 - Prefers honest reporting: say what was measured, what was only inferred and what could not be checked. Say plainly when a gain is small.
 - No `gh` CLI: the user opens PRs from a pre-filled compare URL.
@@ -94,7 +114,7 @@ Not re-triaged finding by finding: these counts show less noise, not a measured 
 ## 8. First things to do
 
 ```
-git fetch && git status -sb              # main should be at or after c6cd1c3
-python -m pytest -q -p no:cacheprovider  # expect 925 passed, 3 skipped
+git fetch && git status -sb              # main should be at or after 99cd872
+python -m pytest -q -p no:cacheprovider  # expect 935 passed, 3 skipped
 ```
 Then check the CI run (item 1) and ask which item to start with.

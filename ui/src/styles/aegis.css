@@ -7,7 +7,7 @@
 .ag-app h1, .ag-app h2, .ag-app h3 { font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; overflow-wrap: break-word; min-width: 0; }
 .ag-app h2 { font-size: var(--text-lg); } .ag-app h3 { font-size: var(--text-md); }
 .ag-app ol, .ag-app ul { margin: 0; padding: 0; list-style: none; }
-.ag-app button, .ag-app input, .ag-app select { font: inherit; color: inherit; }
+.ag-app :where(button, input, select) { font: inherit; color: inherit; }
 
 /* ---------- controls ---------- */
 .ag-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-xs); min-height: 36px; padding: 0 var(--space-md); border: var(--rule-hair) solid var(--line); border-radius: 0; background: var(--paper-2); color: var(--ink); font-weight: 500; font-size: var(--text-sm); cursor: pointer; white-space: nowrap; }

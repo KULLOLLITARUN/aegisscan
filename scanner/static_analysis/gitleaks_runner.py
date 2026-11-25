@@ -38,6 +38,31 @@ def _find_tool(name: str) -> str | None:
 
 _GITLEAKS_CONFIDENCE: float = 0.80
 
+_MASK = "[REDACTED]"
+_QUOTED = re.compile(r"(['\"])(.*?)")
+
+
+def _mask_match(line: str, match: re.Match[str]) -> str:
+    """*line* with the secret inside *match* replaced by a marker, so the quoted evidence never carries it.
+
+    The secret is the last quoted string in the match (``password = "..."``, ``mysqli(h, u, "...")``); failing
+    that, whatever follows the first ``=`` or ``:`` (``Password=...;``); failing that, the whole match
+    (a bare token such as ``gsk_...``).
+    """
+    start, end = match.span()
+    span = line[start:end]
+    quoted = list(_QUOTED.finditer(span))
+    if quoted:
+        q = quoted[-1]
+        a, b = q.span(2)
+        return (line[:start] + span[:a] + _MASK + span[b:] + line[end:]).strip()
+    sep = re.search(r"[=:]", span)
+    if sep:
+        tail = span[sep.end():]
+        value_end = len(tail.rstrip("; 	"))
+        return (line[:start] + span[: sep.end()] + _MASK + tail[value_end:] + line[end:]).strip()
+    return (line[:start] + _MASK + line[end:]).strip()
+
 # Pure-Python secret regex patterns fallback
 _SECRET_PATTERNS = [
     (r"AKIA[0-9A-Z]{16}", "AWS Access Key ID", Severity.HIGH),
@@ -262,7 +287,8 @@ def _run_python_secret_scanner(
                             confidence=_GITLEAKS_CONFIDENCE,
                             line_start=line_idx,
                             line_end=line_idx,
-                            evidence=line.strip(),
+                            # A private-key header line holds no secret itself; every other match is masked.
+                            evidence=line.strip() if issue_type.startswith("Unencrypted") else _mask_match(line, match),
                             explanation=f"Hardcoded secret pattern matched: '{issue_type}'.",
                             suggested_fix="Store secrets in environment variables or a secrets manager.",
                             rule_source="gitleaks",
@@ -274,6 +300,16 @@ def _run_python_secret_scanner(
     return findings
 
 
+def _masked_gitleaks_evidence(item: dict) -> str:
+    """Gitleaks reports the secret itself (``Secret``) and the line it sits in (``Match``); keep the line
+    for context and drop the secret."""
+    secret = str(item.get("Secret", "")).strip()
+    match = str(item.get("Match", "")).strip()
+    if secret and match and secret in match:
+        return match.replace(secret, _MASK)
+    return _MASK if secret else ""
+
+
 def _normalize(item: dict) -> Finding:
     return Finding(
         file_path=Path(item.get("File", "unknown")),
@@ -283,7 +319,7 @@ def _normalize(item: dict) -> Finding:
         confidence=_GITLEAKS_CONFIDENCE,
         line_start=int(item.get("StartLine", 1)),
         line_end=int(item.get("EndLine", item.get("StartLine", 1))),
-        evidence=item.get("Secret", "").strip(),
+        evidence=_masked_gitleaks_evidence(item),
         explanation=(
             f"Gitleaks rule '{item.get('RuleID', 'unknown')}' matched. "
             f"Entropy: {item.get('Entropy', 'n/a')}"

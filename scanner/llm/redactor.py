@@ -50,6 +50,20 @@ _STANDARD_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r'(?<![A-Za-z0-9+/])([A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])'), '[REDACTED_B64]'),
 ]
 
+# The last two standard patterns are generic (any long hex or base64 run). They suit text on its way to an
+# LLM but would mangle ordinary code shown back to the user, so display masking leaves them out.
+_KNOWN_SECRET_PATTERNS = _STANDARD_PATTERNS[:-2]
+
+
+def mask_known_secrets(text: str) -> str:
+    """Replace recognisable secrets (API keys, tokens, private keys, credentials in URLs or in
+    ``password = "..."`` style assignments) with ``[REDACTED_...]`` markers. Used on text shown to the
+    user and stored in results; unlike ``redact`` it never touches plain long hex or base64 strings."""
+    for pattern, replacement in _KNOWN_SECRET_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 # ---------------------------------------------------------------------------
 # Extra patterns for 'redact' privacy mode
 # ---------------------------------------------------------------------------

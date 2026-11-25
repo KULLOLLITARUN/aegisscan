@@ -359,7 +359,7 @@ def test_gitleaks_normalizes_report(monkeypatch, tmp_path: Path) -> None:
     assert len(findings) == 1
     f = findings[0]
     assert f.category == "secrets"
-    assert f.evidence == "AKIAxxxx"
+    assert f.evidence == "[REDACTED]"   # the report carries the secret; the finding must not
     assert (f.line_start, f.line_end) == (5, 6)
     assert "aws-access-token" in f.explanation
 

@@ -47,6 +47,7 @@ from scanner.intelligence.context import (
 )
 from scanner.intelligence.correlator import CorrelationGroup, correlate
 from scanner.intelligence.deduplicator import deduplicate
+from scanner.intelligence.masking import mask_findings
 from scanner.llm.auditor import SUPPRESSION_THRESHOLD, LLMAuditor
 from scanner.models.file_info import FileInfo
 from scanner.models.finding import Finding, Severity
@@ -474,6 +475,8 @@ def run(
     # ---- 8. Baseline suppression ----
     baseline = BaselineManager(baseline_path)
     final_findings, n_suppressed = baseline.suppress(correlated, path)
+    # Nothing shown or stored may carry a secret value (dashboard, kept results, exports).
+    final_findings = mask_findings(final_findings)
 
     # ---- 9. Scoring (V4) ----
     sec_sc = security_score(final_findings, analyzable_count)

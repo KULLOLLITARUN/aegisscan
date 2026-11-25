@@ -314,7 +314,7 @@ def run(
     generate_patches: bool = False,
     progress: Callable[[str, int, str], None] | None = None,
     record_history: bool = True,
-    on_files: Callable[[list[dict]], None] | None = None,
+    on_files: Callable[[list[dict], int], None] | None = None,
     on_findings: Callable[[str, list[dict]], None] | None = None,
 ) -> tuple[ScanResult, list[FileInfo], list[CorrelationGroup]]:
     """
@@ -325,7 +325,7 @@ def run(
     *progress*, if given, is called as ``progress(phase, pct, detail)`` at each
     pipeline phase (pct is 0-100). Exceptions it raises are swallowed.
 
-    *on_files*, if given, is called once after classification with the files that will be analysed,
+    *on_files*, if given, is called once after classification as ``on_files(files, discovered)``: the files that will be analysed,
     as ``[{"path": <posix path relative to the target>, "lines": <line count>}]``. The live UI draws
     its floor from it. Exceptions it raises are swallowed.
 
@@ -390,7 +390,7 @@ def run(
                 except ValueError:
                     rel = fi.path.name
                 listing.append({"path": rel, "lines": fi.line_count or 0})
-            on_files(listing)
+            on_files(listing, len(discovered_files))
         except Exception:
             log.debug("on_files callback failed", exc_info=True)
 

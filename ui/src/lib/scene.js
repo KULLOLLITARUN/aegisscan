@@ -122,5 +122,6 @@ export function buildLiveScene(files, maxTiles = MAX_LIVE_TILES) {
   return {
     tiles, pins: [], floorW: Math.max(160, cols * cellW - LIVE_GAP), floorH: Math.max(120, rows * cellH - LIVE_GAP),
     hiddenPins: 0, hiddenFiles: Math.max(0, total - shown.length), cleanFiles: 0, totalFindings: 0, live: true, total,
+    discovered: Math.max(files?.discovered ?? total, total),
   }
 }

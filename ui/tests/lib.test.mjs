@@ -135,3 +135,10 @@ test('mergePreview adds counts per file and keeps the worst severity', () => {
   assert.equal(b.tool, 'Semgrep')
   assert.equal(a.total, 3, 'the previous state is not changed')
 })
+
+test('buildLiveScene keeps the count of discovered files, which can exceed the analysed ones', () => {
+  const s = buildLiveScene({ files: [{ path: 'a.py', lines: 1 }], total: 1, discovered: 4 })
+  assert.equal(s.total, 1)
+  assert.equal(s.discovered, 4)
+  assert.equal(buildLiveScene({ files: [{ path: 'a.py', lines: 1 }], total: 1 }).discovered, 1)
+})

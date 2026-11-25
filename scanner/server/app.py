@@ -70,9 +70,12 @@ def _send_progress(sse: Any, payload: dict) -> None:
 MAX_PREVIEW_FILES = 5000
 
 
-def _send_files(sse: Any, files: list[dict]) -> None:
-    """Stream the list of files about to be analysed, so the live canvas can draw its floor."""
-    sse("files", {"files": files[:MAX_PREVIEW_FILES], "total": len(files)})
+def _send_files(sse: Any, files: list[dict], discovered: int) -> None:
+    """Stream the list of files about to be analysed, so the live canvas can draw its floor.
+
+    ``discovered`` counts every file the crawler found; binary, generated and oversized ones are not analysed.
+    """
+    sse("files", {"files": files[:MAX_PREVIEW_FILES], "total": len(files), "discovered": max(discovered, len(files))})
 
 
 def _send_preview(sse: Any, tool: str, files: list[dict]) -> None:
@@ -619,7 +622,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                     generate_patches=p["generate_patches"],
                     privacy=p["privacy"],
                     progress=on_progress,
-                    on_files=lambda files: _send_files(sse, files),
+                    on_files=lambda files, discovered: _send_files(sse, files, discovered),
                     on_findings=lambda tool, files: _send_preview(sse, tool, files),
                 )
             finally:
@@ -772,7 +775,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                     generate_patches=p["generate_patches"],
                     privacy=p["privacy"],
                     progress=on_progress if sse else None,
-                    on_files=(lambda files: _send_files(sse, files)) if sse else None,
+                    on_files=(lambda files, discovered: _send_files(sse, files, discovered)) if sse else None,
                     on_findings=(lambda tool, files: _send_preview(sse, tool, files)) if sse else None,
                     record_history=False,
                 )

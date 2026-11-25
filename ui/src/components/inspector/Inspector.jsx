@@ -42,7 +42,7 @@ export default function Inspector({
             onClick={() => setTab(t.id)}
           >
             {t.label}
-            {t.id === 'queue' && result && <span className="ag-num">{result.findings?.length ?? 0}</span>}
+            {t.id === 'queue' && result && !scanning && <span className="ag-num">{result.findings?.length ?? 0}</span>}
           </button>
         ))}
       </div>

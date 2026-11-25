@@ -131,19 +131,20 @@ def test_run_reports_the_analysable_files_once(tmp_path: Path, monkeypatch) -> N
     (tmp_path / "b.py").write_text("z = 3\n", encoding="utf-8")
     (tmp_path / "blob.bin").write_bytes(b"\x00\x01\x02\x03")
     _fast_tools(monkeypatch)
-    seen: list[list[dict]] = []
-    main.run(tmp_path, static_only=True, on_files=seen.append)
+    seen: list[tuple[list[dict], int]] = []
+    main.run(tmp_path, static_only=True, on_files=lambda files, discovered: seen.append((files, discovered)))
 
     assert len(seen) == 1
-    by_path = {f["path"]: f["lines"] for f in seen[0]}
-    assert by_path == {"b.py": 1, "pkg/a.py": 2}
+    files, discovered = seen[0]
+    assert {f["path"]: f["lines"] for f in files} == {"b.py": 1, "pkg/a.py": 2}
+    assert discovered == 3, "the binary file was found but is not analysed"
 
 
 def test_run_survives_a_failing_on_files_callback(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
     _fast_tools(monkeypatch)
 
-    def bad(_files):
+    def bad(_files, _discovered):
         raise RuntimeError("ui exploded")
 
     result, _, _ = main.run(tmp_path, static_only=True, on_files=bad)

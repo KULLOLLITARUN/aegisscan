@@ -16,7 +16,7 @@ export default function RailNav() {
   const navigate = useNavigate()
   const location = useLocation()
   const showHistory = config?.features?.history !== false
-  const urgent = (scanResult?.findings ?? []).filter((f) => {
+  const urgent = (scanning ? [] : (scanResult?.findings ?? [])).filter((f) => {
     const s = normSeverity(f.severity)
     return s === 'critical' || s === 'high'
   }).length

@@ -238,7 +238,7 @@ export default function ScanCanvas({
             ? `${SEVERITY_LABEL[hovered.sev]}: ${hovered.finding.issue_type}, ${hovered.tileId}:${hovered.finding.line_start}, ${Math.round((hovered.finding.confidence ?? 0) * 100)}% confidence`
             : DEFAULT_HINT}
         </div>
-        {live && <div>{`Scanning ${live.total.toLocaleString()} ${live.total === 1 ? 'file' : 'files'}${live.hiddenFiles ? `, ${live.hiddenFiles.toLocaleString()} not drawn` : ''}. The sweep follows the scanner's real progress, which is reported per tool, so which tile lights when is illustrative.`}</div>}
+        {live && <div>{`Scanning ${live.total.toLocaleString()}${live.discovered > live.total ? ` of ${live.discovered.toLocaleString()}` : ''} ${live.discovered === 1 ? 'file' : 'files'}${live.discovered > live.total ? ' (the rest are binary, generated or too large)' : ''}${live.hiddenFiles ? `, ${live.hiddenFiles.toLocaleString()} not drawn` : ''}. The sweep follows the scanner's real progress, which is reported per tool, so which tile lights when is illustrative.`}</div>}
         {live && liveHits && (
           <div>{`Found so far (preliminary, before deduplication): ${liveHits.total.toLocaleString()} in ${Object.keys(liveHits.byPath).length.toLocaleString()} ${Object.keys(liveHits.byPath).length === 1 ? 'file' : 'files'}, last from ${liveHits.tool}.`}</div>
         )}

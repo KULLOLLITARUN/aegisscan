@@ -9,6 +9,7 @@ import ScansPage from './pages/ScansPage'
 import LogsPage from './pages/LogsPage'
 import { ScanProvider } from './context/ScanContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { ToastProvider } from './context/ToastContext'
 import './index.css'
 import './styles/tokens.css'
 import './styles/aegis.css'
@@ -20,6 +21,7 @@ function Page({ children }) {
 export default function App() {
   return (
     <ThemeProvider>
+      <ToastProvider>
       <ScanProvider>
         <BrowserRouter>
           <div className="ag-app">
@@ -38,6 +40,7 @@ export default function App() {
           </div>
         </BrowserRouter>
       </ScanProvider>
+      </ToastProvider>
     </ThemeProvider>
   )
 }

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { ApiError, authHeaders, loadToken, readSse, saveToken, toApiError } from '../lib/api'
 import { zipFiles } from '../lib/upload'
+import { useLocalState } from '../lib/useLocalState'
 import { mergePreview } from '../lib/liveHits'
 
 const ScanContext = createContext(null)
@@ -266,9 +267,27 @@ export function ScanProvider({ children }) {
     }
   }, [config, needsToken, token, hosted, source, buildBody, record, finishWithResult, finishWithError, setToken])
 
+  /** Stop the running scan. Closing the stream tells the server to stop at its next step. */
+  const cancelScan = useCallback(() => {
+    if (!abortRef.current) return
+    abortRef.current.abort()
+    abortRef.current = null
+    setScanning(false)
+    setRecording((r) => ({ ...r, durationMs: nowMs(), live: false }))
+    setProgress({ phase: 'Cancelled', file: '', pct: 0, found: 0 })
+    setLogs((prev) => [...prev, makeLog('warn', 'Scan cancelled. The server stops at its next step; a long step such as Semgrep finishes first.')])
+  }, [])
+
   useEffect(() => () => abortRef.current?.abort(), [])
 
+  const log = useCallback((level, message) => setLogs((prev) => [...prev, makeLog(level, message)]), [])
+  const local = useLocalState({
+    enabled: !!config && !hosted && !needsToken && config.features.history !== false,
+    token, scanResult, setScanResult, scanning, history, log,
+  })
+
   const value = useMemo(() => ({
+    ...local,
     config, hosted, needsToken, token, setToken, authError, setAuthError,
     scanResult, setScanResult,
     scanning, progress,
@@ -278,8 +297,8 @@ export function ScanProvider({ children }) {
     targetPath, setTargetPath,
     source, setSource,
     options, setOptions,
-    startScan,
-  }), [config, hosted, needsToken, token, setToken, authError, scanResult, scanning, progress, logs, history, fetchHistory, historyStatus, scanError, selectedId, recording, liveFiles, liveHits, targetPath, source, options, startScan])
+    startScan, cancelScan,
+  }), [local, config, hosted, needsToken, token, setToken, authError, scanResult, scanning, progress, logs, history, fetchHistory, historyStatus, scanError, selectedId, recording, liveFiles, liveHits, targetPath, source, options, startScan, cancelScan])
 
   return (
     <ScanContext.Provider value={value}>

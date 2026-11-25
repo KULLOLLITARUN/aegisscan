@@ -52,6 +52,8 @@ export const CATEGORY_LABEL = {
   other: 'Other',
 }
 
+export const TRIAGE_LABEL = { false_positive: 'False positive', accepted: 'Accepted risk' }
+
 // `rule_source` is an internal id; show the tool's real name.
 export const SOURCE_LABEL = {
   bandit: 'Bandit',

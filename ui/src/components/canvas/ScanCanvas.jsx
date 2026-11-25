@@ -6,6 +6,7 @@ import Verdict from './Verdict'
 import ScanErrorBody from '../findings/ScanErrorBody'
 
 const BASE_ROT = -32
+const SWAY_INTRO_MS = 14000
 const DEFAULT_HINT = 'Drag to turn the floor, scroll to zoom. Each tile is a file and each pin a finding. Taller means more confident.'
 const SEV_LEGEND = ['critical', 'high', 'medium', 'low', 'info']
 
@@ -24,14 +25,27 @@ export default function ScanCanvas({
   const stageRef = useRef(null)
   const sceneRef = useRef(null)
   const view = useRef({ offset: 0, zoom: 1, cam: { x: 0, y: 0, z: 1 }, camT: { x: 0, y: 0, z: 1 }, drag: null })
-  const [sway, setSway] = useState(() => !prefersReducedMotion())
+  // Sway is an intro: it runs for a while after a result arrives, then eases to a stop so an idle
+  // canvas costs nothing. Turning "Auto sway" on by hand keeps it going.
+  const [sway, setSway] = useState(false)
+  const userSway = useRef(false)
   const swayRef = useRef(sway)
+  const amp = useRef(0)
+  const lastTransform = useRef('')
   const t0 = useRef(performance.now())
   const reduced = useRef(prefersReducedMotion())
 
   useEffect(() => {
     swayRef.current = sway
   }, [sway])
+
+  const scanId = result?.scan_id
+  useEffect(() => {
+    if (!scanId || reduced.current || userSway.current) return undefined
+    setSway(true)
+    const id = setTimeout(() => { if (!userSway.current) setSway(false) }, SWAY_INTRO_MS)
+    return () => clearTimeout(id)
+  }, [scanId])
 
   const { tiles, pins, floorW, floorH } = scene
   const live = scanning && liveScene ? liveScene : null
@@ -64,15 +78,22 @@ export default function ScanCanvas({
     const sc = sceneRef.current
     if (!st || !sc) return
     const v = view.current
-    const s = swayRef.current ? 12 * Math.sin((now - t0.current) / 6500) : 0
+    // The sway amplitude eases in and out instead of snapping when sway toggles.
+    amp.current += ((swayRef.current ? 12 : 0) - amp.current) * (reduced.current ? 1 : 0.03)
+    if (amp.current < 0.01) amp.current = 0
+    const s = amp.current * Math.sin((now - t0.current) / 6500)
     const ease = reduced.current ? 1 : 0.08
     v.cam.x += (v.camT.x - v.cam.x) * ease
     v.cam.y += (v.camT.y - v.cam.y) * ease
     v.cam.z += (v.camT.z - v.cam.z) * ease
-    const rot = BASE_ROT + s + v.offset
+    const rot = (BASE_ROT + s + v.offset).toFixed(2)
     const k = Math.max(0.55, Math.min(1.5, Math.min((st.clientWidth - 360) / (floorW + 80), st.clientHeight / (floorH + 250)))) * v.cam.z * v.zoom
-    sc.style.setProperty('--rot', `${rot.toFixed(2)}deg`)
-    sc.style.transform = `rotateX(58deg) rotateZ(${rot.toFixed(2)}deg) scale(${k.toFixed(3)}) translate3d(${(-v.cam.x).toFixed(1)}px, ${(-v.cam.y).toFixed(1)}px, 0)`
+    const transform = `rotateX(58deg) rotateZ(${rot}deg) scale(${k.toFixed(3)}) translate3d(${(-v.cam.x).toFixed(1)}px, ${(-v.cam.y).toFixed(1)}px, 0)`
+    // Nothing moved since the last frame: skip the write, so an idle canvas does no style work.
+    if (transform === lastTransform.current) return
+    lastTransform.current = transform
+    sc.style.setProperty('--rot', `${rot}deg`)
+    sc.style.transform = transform
   })
 
   const onPointerDown = (e) => {
@@ -201,7 +222,7 @@ export default function ScanCanvas({
       <Verdict result={result} scanning={scanning} error={error} history={history} historyStatus={historyStatus} steps={steps} liveSec={liveSec} />
 
       <div className="ag-viewctl">
-        <button type="button" className="ag-btn ag-btn--sm" aria-pressed={sway} onClick={() => setSway((s) => !s)}>
+        <button type="button" className="ag-btn ag-btn--sm" aria-pressed={sway} onClick={() => { userSway.current = true; setSway((s) => !s) }}>
           {sway ? 'Hold view' : 'Auto sway'}
         </button>
         <button type="button" className="ag-btn ag-btn--sm ag-btn--ghost" onClick={resetView}>Reset view</button>

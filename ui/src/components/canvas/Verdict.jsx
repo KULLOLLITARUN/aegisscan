@@ -1,4 +1,7 @@
 import { scoreLabel, verdictSentence, previousScan, scoreDelta } from '../../lib/verdict'
+import { scoreStatus, statusVar } from '../../lib/score'
+import ScoreNumber from '../ScoreNumber'
+import { useScan } from '../../context/ScanContext'
 
 const nf = new Intl.NumberFormat('en', { maximumFractionDigits: 1, minimumFractionDigits: 1 })
 
@@ -43,6 +46,7 @@ function DeltaLine({ result, history, historyStatus }) {
 
 /** The verdict block drawn on the canvas. Every number comes from the ScanResult or /api/history. */
 export default function Verdict({ result, scanning, error, history, historyStatus, steps = [], liveSec = 0 }) {
+  const { diff } = useScan()
   if (scanning) return <div className="ag-score"><Live steps={steps} liveSec={liveSec} /></div>
 
   const has = result && result.security_score != null
@@ -52,18 +56,28 @@ export default function Verdict({ result, scanning, error, history, historyStatu
   return (
     <div className="ag-score">
       <div className="ag-label">Security score</div>
-      <div className="ag-hero" aria-label={has ? `Security score ${nf.format(sec)} out of 100` : 'No score yet'}>
-        {has ? nf.format(sec) : '--'}
+      <div className="ag-hero" aria-label={has ? `Security score ${nf.format(sec)} out of 100, ${scoreLabel(sec)}` : 'No score yet'}>
+        {has ? <ScoreNumber key={result.scan_id} value={sec} /> : '--'}
         <small>/ 100</small>
       </div>
+      {has && (
+        <span className="ag-status-chip" aria-hidden="true">
+          <i className="ag-dot" style={{ '--c': statusVar(scoreStatus(sec)) }} />{scoreLabel(sec)}
+        </span>
+      )}
       <div className="ag-ruler" aria-hidden="true">
-        {has && <i style={{ '--v': Math.min(1, Math.max(0, sec / 100)) }} />}
+        {has && <i key={result.scan_id} style={{ '--v': Math.min(1, Math.max(0, sec / 100)), '--c': statusVar(scoreStatus(sec)) }} />}
       </div>
       <div className="ag-ruler-labels ag-mono" aria-hidden="true"><span>0</span><span>50</span><span>100</span></div>
       <p className="ag-verdict">
         {error ? 'The scan did not finish.' : result ? verdictSentence(result.findings) : 'Run a scan to see a verdict.'}
       </p>
       {result && !error && <DeltaLine result={result} history={history} historyStatus={historyStatus} />}
+      {result && !error && diff && (
+        <span className="ag-delta ag-mono ag-newfixed">
+          <b>{diff.newIds.size}</b> new, <b>{diff.fixed.length}</b> fixed since the previous scan
+        </span>
+      )}
       <div className="ag-opt">
         <span className="ag-label">Optimization</span>
         <span />

@@ -4,6 +4,10 @@ import Count from '../Count'
 import { relPath } from '../../lib/paths'
 import { sortFindings } from '../../lib/scene'
 import ScanErrorBody from '../findings/ScanErrorBody'
+import NoteBadges from '../findings/NoteBadges'
+import FindingFlags from '../findings/FindingFlags'
+import { useScan } from '../../context/ScanContext'
+import { isDownweighted } from '../../lib/notes'
 
 const ROW_CAP = 300
 const SORTERS = {
@@ -24,8 +28,13 @@ export default function FindingsQueue({ result, scanning, error, selectedId, onS
   const [query, setQuery] = useState('')
   const [sev, setSev] = useState('all')
   const [sort, setSort] = useState('sev')
+  const [hideDown, setHideDown] = useState(false)
+  const [hideTriaged, setHideTriaged] = useState(true)
+  const { triageOf } = useScan()
 
   const findings = useMemo(() => result?.findings ?? [], [result])
+  const downCount = useMemo(() => findings.filter(isDownweighted).length, [findings])
+  const triagedCount = useMemo(() => findings.filter((f) => triageOf(f)).length, [findings, triageOf])
   const counts = useMemo(() => {
     const c = {}
     for (const f of findings) c[normSeverity(f.severity)] = (c[normSeverity(f.severity)] || 0) + 1
@@ -35,13 +44,15 @@ export default function FindingsQueue({ result, scanning, error, selectedId, onS
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
     const filtered = findings.filter((f) => {
+      if (hideDown && isDownweighted(f)) return false
+      if (hideTriaged && triageOf(f)) return false
       if (sev !== 'all' && normSeverity(f.severity) !== sev) return false
       if (!q) return true
       const hay = `${f.issue_type} ${f.file_path} ${f.rule_source} ${CATEGORY_LABEL[normCategory(f.category)]}`.toLowerCase()
       return hay.includes(q)
     })
     return SORTERS[sort](filtered)
-  }, [findings, query, sev, sort])
+  }, [findings, query, sev, sort, hideDown, hideTriaged, triageOf])
 
   if (scanning) return <Skeleton />
   if (error) {
@@ -93,13 +104,25 @@ export default function FindingsQueue({ result, scanning, error, selectedId, onS
             </button>
           ))}
         </div>
+        {downCount > 0 && (
+          <label className="ag-check ag-check--tight">
+            <input type="checkbox" checked={hideDown} onChange={(e) => setHideDown(e.target.checked)} />
+            Hide {downCount} down-weighted (tests, CI notes, AI remarks)
+          </label>
+        )}
+        {triagedCount > 0 && (
+          <label className="ag-check ag-check--tight">
+            <input type="checkbox" checked={hideTriaged} onChange={(e) => setHideTriaged(e.target.checked)} />
+            Hide {triagedCount} triaged (false positives, accepted risks)
+          </label>
+        )}
       </div>
       {rows.length ? (
         <ol>
-          {shown.map((f) => {
+          {shown.map((f, i) => {
             const s = normSeverity(f.severity)
             return (
-              <li key={f.id}>
+              <li key={f.id} style={{ '--i': i }}>
                 <button
                   type="button"
                   className="ag-qrow"
@@ -112,10 +135,11 @@ export default function FindingsQueue({ result, scanning, error, selectedId, onS
                 >
                   <span className="ag-g"><i className={`ag-sq s-${s}`} /><span className="visually-hidden">{SEVERITY_LABEL[s]}</span></span>
                   <span>
-                    <span className="ag-issue">{f.issue_type}</span>
+                    <span className="ag-issue">{f.issue_type}<FindingFlags finding={f} /></span>
                     <span className="ag-sub">
                       <span className="ag-mono ag-loc">{relPath(f.file_path, result.target_path)}:{f.line_start}</span>
                       <span>{sourceLabel(f.rule_source)}</span>
+                      <NoteBadges explanation={f.explanation} compact />
                     </span>
                   </span>
                   <span className="ag-conf ag-mono">{Math.round((f.confidence ?? 0) * 100)}%</span>
@@ -128,7 +152,7 @@ export default function FindingsQueue({ result, scanning, error, selectedId, onS
         <div className="ag-state">
           <h3>No findings match</h3>
           <p>Try a different severity or clear the search.</p>
-          <button type="button" className="ag-btn" onClick={() => { setSev('all'); setQuery('') }}>Clear filters</button>
+          <button type="button" className="ag-btn" onClick={() => { setSev('all'); setQuery(''); setHideDown(false); setHideTriaged(false) }}>Clear filters</button>
         </div>
       )}
       <div className="ag-qfoot">

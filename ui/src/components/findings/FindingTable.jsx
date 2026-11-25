@@ -1,4 +1,7 @@
-import { SEVERITY_LABEL, CATEGORY_LABEL, normSeverity, normCategory, sourceLabel } from '../../constants'
+import { SEVERITY_LABEL, normSeverity, sourceLabel } from '../../constants'
+import CategoryTag from './CategoryTag'
+import NoteBadges from './NoteBadges'
+import FindingFlags from './FindingFlags'
 import { relPath } from '../../lib/paths'
 
 /**
@@ -20,11 +23,11 @@ export default function FindingTable({ findings, target, selectedId, onSelect, s
           </tr>
         </thead>
         <tbody>
-          {findings.map((f) => {
+          {findings.map((f, i) => {
             const s = normSeverity(f.severity)
             const pct = Math.round((f.confidence ?? 0) * 100)
             return (
-              <tr key={f.id} className={f.id === selectedId ? 'sel' : undefined} onClick={() => onSelect(f)}>
+              <tr key={f.id} className={f.id === selectedId ? 'sel' : undefined} style={{ '--i': i }} onClick={() => onSelect(f)}>
                 <td>
                   <span className="ag-sevline">
                     <i className={`ag-sq s-${s}`} />
@@ -35,8 +38,10 @@ export default function FindingTable({ findings, target, selectedId, onSelect, s
                   <button type="button" className="ag-link" onClick={(e) => { e.stopPropagation(); onSelect(f) }}>
                     {f.issue_type}
                   </button>
+                  <FindingFlags finding={f} />
+                  <NoteBadges explanation={f.explanation} compact />
                 </td>
-                <td>{CATEGORY_LABEL[normCategory(f.category)]}</td>
+                <td><CategoryTag category={f.category} /></td>
                 <td className="ag-mono ag-loc">{showFile ? `${relPath(f.file_path, target)}:${f.line_start}` : f.line_start}</td>
                 <td>{sourceLabel(f.rule_source)}</td>
                 <td className="ag-right ag-mono">{pct}%</td>

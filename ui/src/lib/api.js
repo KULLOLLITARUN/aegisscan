@@ -24,6 +24,31 @@ export function authHeaders(token) {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+/**
+ * Ask the server to render the current result as html, sarif or json, and save it.
+ * Returns the file name. The result is sent back because the server keeps no copy of it.
+ */
+export async function exportResult(format, result, token) {
+  const res = await fetch(`/api/export?format=${encodeURIComponent(format)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(result),
+  })
+  if (!res.ok) throw await toApiError(res)
+  const blob = await res.blob()
+  const m = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')
+  const name = m ? m[1] : `aegisscan-report.${format}`
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return name
+}
+
 /** An HTTP error from the server with the message it sent. */
 export class ApiError extends Error {
   constructor(status, message) {

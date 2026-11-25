@@ -1,17 +1,44 @@
-import { useEffect, useRef, useState } from 'react'
-import { SEVERITY_LABEL, CATEGORY_LABEL, normSeverity, normCategory, sourceLabel } from '../../constants'
+import { SEVERITY_LABEL, TRIAGE_LABEL, normSeverity, sourceLabel } from '../../constants'
+import CategoryTag from '../findings/CategoryTag'
+import NoteBadges from '../findings/NoteBadges'
+import { parseNotes } from '../../lib/notes'
+import { useToast } from '../../context/ToastContext'
+import { useScan } from '../../context/ScanContext'
+import FindingFlags from '../findings/FindingFlags'
 import { relPath } from '../../lib/paths'
 import { highlight, parseDiff } from './highlight.jsx'
+
+/** Mark a finding a false positive or an accepted risk (local mode), or reopen it. */
+function TriageActions({ finding }) {
+  const { canKeep, triageOf, setTriage } = useScan()
+  const { toast } = useToast()
+  if (!canKeep) return null
+  const current = triageOf(finding)
+  const decide = async (status) => {
+    try {
+      await setTriage(finding, status)
+      toast(status ? `Marked as ${TRIAGE_LABEL[status].toLowerCase()}` : 'Reopened')
+    } catch (err) {
+      toast(err?.message || 'Could not save that decision', 'err')
+    }
+  }
+  if (current) {
+    return <button type="button" className="ag-btn" onClick={() => decide(null)}>Reopen ({TRIAGE_LABEL[current]})</button>
+  }
+  return (
+    <>
+      <button type="button" className="ag-btn" onClick={() => decide('false_positive')}>Mark false positive</button>
+      <button type="button" className="ag-btn ag-btn--ghost" onClick={() => decide('accepted')}>Accept risk</button>
+    </>
+  )
+}
 
 function Code({ children }) {
   return <pre className="ag-code">{children}</pre>
 }
 
 export default function Evidence({ finding, result, scanning }) {
-  const [msg, setMsg] = useState(null)
-  const timer = useRef(0)
-  useEffect(() => () => clearTimeout(timer.current), [])
-  useEffect(() => { setMsg(null) }, [finding?.id])
+  const { toast } = useToast()
 
   if (scanning) {
     return <div className="ag-state" role="status"><h3>Scan in progress</h3><p>Evidence is available once the scan completes.</p></div>
@@ -43,27 +70,28 @@ export default function Evidence({ finding, result, scanning }) {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(fixText)
-      setMsg({ ok: true, text: finding.fix_patch ? 'Patch copied' : 'Fix copied' })
+      toast(finding.fix_patch ? 'Patch copied' : 'Fix copied')
     } catch {
-      setMsg({ ok: false, text: 'Copy blocked by the browser' })
+      toast('Copy was blocked by the browser', 'err')
     }
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => setMsg(null), 2200)
   }
+  const { text: explanation } = parseNotes(finding.explanation)
 
   return (
     <div className="ag-detail">
       <span className="ag-sevline">
         <i className={`ag-sq s-${sev}`} style={{ color: `var(--sev-${sev})` }} />
-        {SEVERITY_LABEL[sev]}, {CATEGORY_LABEL[normCategory(finding.category)]}
+        {SEVERITY_LABEL[sev]}
+        <CategoryTag category={finding.category} />
       </span>
-      <h3>{finding.issue_type}</h3>
+      <h3>{finding.issue_type}<FindingFlags finding={finding} /></h3>
       <div className="ag-facts">
         <div>Confidence<b>{Math.round((finding.confidence ?? 0) * 100)}%</b></div>
         <div>Location<b>{loc}</b></div>
         <div>Source<b>{sourceLabel(finding.rule_source)}</b></div>
       </div>
-      {finding.explanation && <p>{finding.explanation}</p>}
+      <NoteBadges explanation={finding.explanation} />
+      {explanation && <p>{explanation}</p>}
       <div>
         <div className="ag-sub-h">Evidence</div>
         {finding.evidence ? (
@@ -104,7 +132,7 @@ export default function Evidence({ finding, result, scanning }) {
         <button type="button" className="ag-btn ag-btn--primary" onClick={copy} disabled={!fixText}>
           {finding.fix_patch || !fixText ? 'Copy patch' : 'Copy fix'}
         </button>
-        <span className={`ag-confirm${msg && !msg.ok ? ' bad' : ''}`} role="status">{msg?.text}</span>
+        <TriageActions finding={finding} />
       </div>
     </div>
   )

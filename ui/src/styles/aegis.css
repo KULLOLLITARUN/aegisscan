@@ -103,7 +103,7 @@ select.ag-input { padding-right: var(--space-md); }
 .ag-stem { left: -1px; top: calc(var(--h) * -1); width: 2px; height: var(--h); background: currentColor; transform-origin: 50% 100%; transition: transform var(--dur-long) var(--ease-out); transform: scaleY(0); }
 .ag-pin.on .ag-stem { transform: scaleY(1); }
 .ag-pin.sel .ag-stem { width: 4px; left: -2px; }
-.ag-cap { left: -10px; top: calc(var(--h) * -1 - 10px); width: 20px; height: 20px; padding: 0; background: none; border: 0; cursor: pointer; color: inherit; transition: transform var(--dur-long) var(--ease-out), opacity var(--dur-short) var(--ease-out); opacity: 0; transform: translateY(var(--h)); pointer-events: none; }
+.ag-cap { left: -10px; top: calc(var(--h) * -1 - 10px); width: 20px; height: 20px; padding: 0; background: none; border: 0; cursor: pointer; color: inherit; transition: transform 640ms var(--ease-land), opacity var(--dur-short) var(--ease-out); opacity: 0; transform: translateY(var(--h)); pointer-events: none; }
 .ag-pin.on .ag-cap { opacity: 1; transform: none; pointer-events: auto; }
 .ag-cap i { position: absolute; inset: 3px; background: currentColor; transition: transform var(--dur-micro) var(--ease-out); }
 .ag-cap.s-critical i { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); inset: 0; }
@@ -122,7 +122,7 @@ select.ag-input { padding-right: var(--space-md); }
 .ag-hero { font-family: var(--font-outlier); font-variant-numeric: tabular-nums; font-size: var(--text-hero); line-height: 0.95; letter-spacing: -0.06em; margin-top: var(--space-xs); display: flex; align-items: baseline; gap: var(--space-sm); }
 .ag-hero small { font-size: var(--text-md); color: var(--muted); letter-spacing: 0; }
 .ag-ruler { position: relative; margin-top: var(--space-md); height: 24px; border-bottom: var(--rule-hair) solid var(--ink); background: repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 10%) bottom / 100% 8px no-repeat, repeating-linear-gradient(90deg, var(--muted-2) 0 1px, transparent 1px 2%) bottom / 100% 4px no-repeat; }
-.ag-ruler i { position: absolute; bottom: -1px; left: calc(var(--v, 0) * 100%); width: 12px; height: 14px; translate: -50% 0; background: var(--accent); clip-path: polygon(50% 0, 100% 100%, 0 100%); animation: ag-slide 900ms var(--ease-out) backwards; }
+.ag-ruler i { position: absolute; bottom: -1px; left: calc(var(--v, 0) * 100%); width: 12px; height: 14px; translate: -50% 0; background: var(--c, var(--accent)); clip-path: polygon(50% 0, 100% 100%, 0 100%); animation: ag-slide 1100ms var(--ease-out) backwards; }
 @keyframes ag-slide { from { transform: translateX(calc(var(--v, 0) * -300px)); } }
 .ag-ruler-labels { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--muted); margin-top: var(--space-3xs); }
 .ag-verdict { font-size: var(--text-xl); letter-spacing: -0.03em; line-height: 1.2; margin-top: var(--space-md); font-weight: 600; max-width: 16ch; }
@@ -280,7 +280,7 @@ select.ag-input { padding-right: var(--space-md); }
 .ag-pagehead { display: grid; gap: var(--space-2xs); }
 .ag-pagehead h1 { font-size: var(--text-2xl); letter-spacing: -0.03em; font-weight: 600; margin: 0; }
 .ag-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
-.ag-toolbar .ag-input:first-of-type { flex: 1 1 220px; min-width: 0; }
+.ag-toolbar input.ag-input { flex: 1 1 220px; min-width: 0; }
 .ag-tablewrap { overflow-x: auto; border: var(--rule-hair) solid var(--line); background: var(--paper-2); }
 .ag-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .ag-table th { text-align: left; font-weight: 500; font-size: var(--text-xs); color: var(--muted); padding: var(--space-sm) var(--space-md); border-bottom: var(--rule-hair) solid var(--line); background: var(--paper-3); white-space: nowrap; }
@@ -289,7 +289,8 @@ select.ag-input { padding-right: var(--space-md); }
 .ag-table tbody tr:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); }
 .ag-table tbody tr.sel { background: var(--paper-3); box-shadow: inset 3px 0 0 var(--accent); }
 .ag-table .ag-right { text-align: right; }
-.ag-table .ag-loc { overflow-wrap: anywhere; font-size: var(--text-xs); }
+.ag-table .ag-loc { white-space: nowrap; font-size: var(--text-xs); }
+.ag-table td:nth-last-child(2) { white-space: nowrap; }  /* source: "Secret scan" stays on one line */
 .ag-table .ag-sevline { white-space: nowrap; }
 .ag-link { background: none; border: 0; padding: 0; text-align: left; font-weight: 500; color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .ag-link:hover { text-decoration-color: var(--accent); }
@@ -331,3 +332,120 @@ select.ag-input { padding-right: var(--space-md); }
   .ag-source { flex-wrap: wrap; flex: 1 1 100%; }
   .ag-source-note { white-space: normal; }
 }
+
+/* ---------- danger button (Cancel scan) ---------- */
+.ag-btn--danger { background: var(--danger); border-color: var(--danger); color: var(--danger-ink); }
+.ag-btn--danger:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
+
+/* ---------- score status: a coloured mark next to an ink number and a label, never colour alone ---------- */
+.ag-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--muted-2)); flex: none; box-shadow: 0 0 0 2px var(--paper-2); }
+.ag-score-cell { display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; }
+.ag-score-cell .ag-num { color: var(--ink); }
+.ag-score-cell .ag-muted { font-size: var(--text-xs); }
+.ag-sevmini { display: inline-flex; align-items: center; gap: var(--space-sm); }
+.ag-sevmini-part { display: inline-flex; align-items: center; gap: var(--space-2xs); color: var(--ink-2); font-size: var(--text-xs); }
+.ag-table--static tbody tr { cursor: default; }
+.ag-nowrap { white-space: nowrap; }
+.ag-field-inline { display: inline-flex; align-items: center; gap: var(--space-sm); font-size: var(--text-sm); }
+
+/* ---------- History: score trend (single series: 2px line, ringed markers, hairline grid) ---------- */
+.ag-trendbox { padding: var(--space-md) var(--space-lg) var(--space-sm); display: grid; gap: var(--space-sm); }
+.ag-trendhead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-md); }
+.ag-trendhead h2 { font-size: var(--text-md); }
+.ag-trend-note { padding: var(--space-md) 0 var(--space-lg); font-size: var(--text-sm); }
+.ag-trend { position: relative; height: 184px; outline-offset: 4px; cursor: crosshair; touch-action: pan-y; }
+.ag-trend svg { display: block; overflow: visible; }
+.ag-trend-grid { stroke: var(--line-2); stroke-width: 1; shape-rendering: crispEdges; }
+.ag-trend-axis { fill: var(--muted); font-family: var(--font-outlier); font-size: 11px; }
+.ag-trend-cross { stroke: var(--muted-2); stroke-width: 1; shape-rendering: crispEdges; }
+.ag-trend-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
+  stroke-dasharray: 1; stroke-dashoffset: 0; animation: ag-draw 900ms var(--ease-out) both; }
+.ag-trend-dot { fill: var(--c); stroke: var(--paper-2); stroke-width: 2; animation: ag-pop var(--dur-short) var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 24) * 30ms + 300ms); transform-box: fill-box; transform-origin: center; }
+.ag-trend-dot.on { stroke-width: 3; }
+.ag-trend-end { fill: var(--ink); font-family: var(--font-outlier); font-size: 12px; }
+.ag-trend-tip { position: absolute; top: 0; width: 180px; display: grid; gap: var(--space-3xs); padding: var(--space-xs) var(--space-sm); background: var(--paper-2); border: var(--rule-hair) solid var(--ink); font-size: var(--text-xs); pointer-events: none; z-index: 2; }
+.ag-trend-tip strong { font-size: var(--text-lg); font-weight: 500; color: var(--ink); }
+.ag-trend-tip span { display: inline-flex; align-items: center; gap: var(--space-xs); }
+@keyframes ag-draw { from { stroke-dashoffset: 1; } }
+
+/* ---------- category tag: shape and text, no colour (colour means severity here) ---------- */
+.ag-cat { display: inline-flex; align-items: center; gap: var(--space-2xs); color: var(--ink-2); white-space: nowrap; font-weight: 400; }
+.ag-cat svg { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.ag-sevline .ag-cat { margin-left: var(--space-sm); padding-left: var(--space-sm); border-left: var(--rule-hair) solid var(--line); }
+
+/* ---------- score status chip next to the hero number ---------- */
+.ag-status-chip { display: inline-flex; align-items: center; gap: var(--space-xs); margin-top: var(--space-xs); padding: var(--space-3xs) var(--space-sm); border: var(--rule-hair) solid var(--line); font-size: var(--text-sm); color: var(--ink-2); animation: ag-step-in var(--dur-long) var(--ease-out) 700ms both; }
+.ag-scorenum { display: inline-block; min-width: 4ch; }
+
+/* ---------- more contrast when the system asks for it ---------- */
+@media (prefers-contrast: more) {
+  :root { --muted: var(--ink-2); --muted-2: var(--ink-2); --line: var(--ink-2); --line-2: var(--muted); }
+  .ag-btn, .ag-input, .ag-chip, .ag-tablewrap, .ag-box { border-color: var(--ink); }
+}
+
+/* Windows high-contrast (forced colours): the system replaces every colour, so severity and status
+   fall back to their shapes and labels, which this UI always shows anyway. Keep the marks visible. */
+@media (forced-colors: active) {
+  .ag-sq, .ag-dot, .ag-cap i, .ag-ruler i, .ag-mark { forced-color-adjust: none; background: CanvasText; }
+  .ag-sq.s-low, .ag-cap.s-low i { background: none; box-shadow: inset 0 0 0 2px CanvasText; }
+  .ag-trend-line { stroke: CanvasText; }
+  .ag-trend-dot { fill: CanvasText; stroke: Canvas; }
+}
+
+/* ---------- down-weighting badges (why a finding was lowered) ---------- */
+.ag-notes { display: inline-flex; flex-wrap: wrap; gap: var(--space-2xs); }
+.ag-note { display: inline-flex; align-items: center; min-height: 20px; padding: 0 var(--space-xs); border: var(--rule-hair) dashed var(--muted-2); color: var(--ink-2); font-size: var(--text-xs); white-space: nowrap; cursor: help; }
+.ag-notes.compact .ag-note { min-height: 16px; padding: 0 var(--space-2xs); font-size: 0.6875rem; color: var(--muted); }
+.ag-table .ag-notes { display: flex; margin-top: var(--space-2xs); }
+.ag-check--tight { min-height: 28px; padding: 0; font-size: var(--text-xs); color: var(--muted); white-space: normal; }
+
+/* ---------- export menu ---------- */
+.ag-export { width: 280px; padding: var(--space-2xs); gap: 0; }
+.ag-export-item { display: grid; gap: var(--space-3xs); padding: var(--space-sm); background: none; border: 0; text-align: left; cursor: pointer; font-size: var(--text-sm); }
+.ag-export-item .ag-muted { font-size: var(--text-xs); }
+.ag-export-item:hover:not([disabled]) { background: var(--paper-3); }
+.ag-export-item[disabled] { cursor: progress; opacity: .6; }
+.ag-opts-panel { animation: ag-menu-in var(--dur-short) var(--ease-out); transform-origin: top right; }
+@keyframes ag-menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+
+/* ---------- toasts ---------- */
+.ag-toasts { position: fixed; right: var(--space-lg); bottom: var(--space-lg); z-index: 500; display: grid; gap: var(--space-xs); justify-items: end; pointer-events: none; }
+.ag-toast { pointer-events: auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-sm); min-width: 240px; max-width: 420px; padding: var(--space-sm) var(--space-xs) var(--space-sm) var(--space-md); background: var(--ink); color: var(--paper); font-size: var(--text-sm); box-shadow: 0 8px 24px color-mix(in oklab, var(--ink) 25%, transparent); animation: ag-toast-in 260ms var(--ease-out); }
+.ag-toast i { width: 8px; height: 8px; border-radius: 50%; background: var(--status-good); }
+.ag-toast.t-err i { background: var(--status-critical); }
+.ag-toast.leaving { animation: ag-toast-out 200ms ease-in forwards; }
+.ag-toast-x { background: none; border: 0; color: inherit; opacity: .7; font-size: 18px; line-height: 1; width: 28px; height: 28px; cursor: pointer; }
+.ag-toast-x:hover { opacity: 1; }
+@keyframes ag-toast-in { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+@keyframes ag-toast-out { to { opacity: 0; transform: translateX(16px); } }
+
+/* ---------- motion: rows enter in a short stagger (first 14 rows; the rest appear with the last) ---------- */
+.ag-table tbody tr, .ag-inspector li { animation: ag-row-in 340ms var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 14) * 22ms); }
+@keyframes ag-row-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* ---------- motion: page and theme changes are View Transitions (lib/transition.js) ----------
+   The command bar and the rail keep still; only the main area crossfades and lifts a little.
+   A theme change crossfades the whole page (the root transition). */
+.ag-cmd { view-transition-name: ag-cmd; }
+.ag-rail { view-transition-name: ag-rail; }
+.ag-page, .ag-canvas { view-transition-name: ag-main; }
+.ag-inspector { view-transition-name: ag-inspector; }
+::view-transition-group(*) { animation-duration: 320ms; animation-timing-function: var(--ease-out); }
+::view-transition-old(ag-main) { animation: 160ms ease-in both ag-vt-out; }
+::view-transition-new(ag-main) { animation: 320ms var(--ease-out) both ag-vt-in; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 360ms; }
+@keyframes ag-vt-out { to { opacity: 0; transform: translateY(-4px); } }
+@keyframes ag-vt-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
+/* ---------- new since last scan, and triage flags ---------- */
+.ag-flags { display: inline-flex; gap: var(--space-2xs); margin-left: var(--space-xs); vertical-align: 2px; }
+.ag-flag { display: inline-flex; align-items: center; min-height: 18px; padding: 0 var(--space-2xs); font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.02em; border: var(--rule-hair) solid currentColor; white-space: nowrap; }
+.ag-flag.f-new { color: var(--accent); background: color-mix(in oklab, var(--accent) 10%, transparent); animation: ag-pop var(--dur-short) var(--ease-out) both; }
+.ag-flag.f-false_positive, .ag-flag.f-accepted { color: var(--muted); border-style: dashed; }
+.ag-detail h3 .ag-flags { vertical-align: 4px; }
+.ag-newfixed b { color: var(--ink); font-weight: 500; }
+.ag-row-dim td { color: var(--muted); }
+.ag-row-dim .ag-link { color: var(--muted); }

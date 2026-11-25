@@ -3,13 +3,15 @@ import { Link } from 'react-router-dom'
 import { useScan } from '../../context/ScanContext'
 import { useTheme } from '../../context/ThemeContext'
 import SourcePicker from './SourcePicker'
+import ExportMenu from './ExportMenu'
+import { withTransition } from '../../lib/transition'
 
 function ThemeSwitch() {
   const { theme, setTheme } = useTheme()
   return (
     <div className="ag-seg" role="group" aria-label="Colour theme">
-      <button type="button" aria-pressed={theme === 'day'} onClick={() => setTheme('day')}>Day</button>
-      <button type="button" aria-pressed={theme === 'night'} onClick={() => setTheme('night')}>Night</button>
+      <button type="button" aria-pressed={theme === 'day'} onClick={() => theme !== 'day' && withTransition(() => setTheme('day'))}>Day</button>
+      <button type="button" aria-pressed={theme === 'night'} onClick={() => theme !== 'night' && withTransition(() => setTheme('night'))}>Night</button>
     </div>
   )
 }
@@ -65,7 +67,7 @@ function MoreOptions() {
 }
 
 export default function CommandBar() {
-  const { config, hosted, scanning, scanResult, progress, scanError, startScan, targetPath, setTargetPath, options, setOptions } = useScan()
+  const { config, hosted, scanning, scanResult, progress, scanError, startScan, cancelScan, targetPath, setTargetPath, options, setOptions } = useScan()
   const showScanOptions = !hosted || !!config?.features?.llm
 
   let status = 'Idle'
@@ -134,11 +136,18 @@ export default function CommandBar() {
           {!hosted && <MoreOptions />}
         </>
       )}
-      <button type="button" className="ag-btn ag-btn--primary" onClick={startScan} disabled={scanning || !config}>
-        {scanning ? 'Scanning' : 'Run scan'}
-      </button>
+      {scanning ? (
+        <button type="button" className="ag-btn ag-btn--danger" onClick={cancelScan}>
+          Cancel scan
+        </button>
+      ) : (
+        <button type="button" className="ag-btn ag-btn--primary" onClick={startScan} disabled={!config}>
+          Run scan
+        </button>
+      )}
       <div className="ag-cmd-end">
         <span className="ag-status" role="status">{status}</span>
+        <ExportMenu />
         <ThemeSwitch />
       </div>
     </header>

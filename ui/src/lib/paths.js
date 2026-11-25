@@ -6,6 +6,13 @@ export function relPath(filePath, targetPath) {
   return f
 }
 
+/** Forward slashes, no trailing slash: for comparing scan targets. */
+export function normPath(p) {
+  let s = String(p || '').replaceAll('\\', '/')
+  while (s.length > 1 && s.endsWith('/')) s = s.slice(0, -1)
+  return s
+}
+
 export function baseName(p) {
   const parts = String(p).split('/')
   return parts[parts.length - 1] || p

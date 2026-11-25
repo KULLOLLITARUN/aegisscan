@@ -173,6 +173,8 @@ jobs:
 
       - name: Lint UI
         run: npm run lint
+      - name: Test UI logic
+        run: npm test
 
       - name: Build UI
         run: npm run build

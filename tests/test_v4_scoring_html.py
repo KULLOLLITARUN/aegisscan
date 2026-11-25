@@ -111,8 +111,11 @@ def test_score_labels_and_colors() -> None:
     assert score_label(40) == "Poor"
     assert score_label(10) == "Critical"
 
-    assert score_color(95) == "#3fb950"
-    assert score_color(10) == "#ff4444"
+    # The web UI's Night status scale (ui/src/lib/score.js bands): good, warning, serious, critical
+    assert score_color(95) == "#5ac576"
+    assert score_color(60) == "#eec651"
+    assert score_color(40) == "#f28e42"
+    assert score_color(10) == "#ff645f"
 
 
 def test_generate_html_creates_file(tmp_path: Path) -> None:

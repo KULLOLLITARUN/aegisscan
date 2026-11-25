@@ -99,13 +99,12 @@ def score_label(score: float) -> str:
 
 
 def score_color(score: float) -> str:
-    """Hex colour for a score — used in HTML report."""
-    if score >= 90:
-        return "#3fb950"   # green
+    """Hex colour for a score in the HTML report: the web UI's Night status scale (good, warning,
+    serious, critical) with the same bands as ui/src/lib/score.js. Always shown next to a label."""
     if score >= 75:
-        return "#79c0ff"   # blue
+        return "#5ac576"   # good
     if score >= 55:
-        return "#f0b429"   # amber
+        return "#eec651"   # warning
     if score >= 30:
-        return "#ff6b35"   # orange
-    return "#ff4444"       # red
+        return "#f28e42"   # serious
+    return "#ff645f"       # critical

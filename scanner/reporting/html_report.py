@@ -23,16 +23,16 @@ from scanner.models.scan import ScanResult
 from scanner.scoring.calculator import score_color, score_label
 
 # ---------------------------------------------------------------------------
-# Colour constants (Midnight Obsidian palette)
+# Colour constants: the web UI's Night theme (ui/src/styles/tokens.css), so report and app match
 # ---------------------------------------------------------------------------
 
 _SEV_COLORS: dict[Severity, tuple[str, str]] = {
-    # (background, text)
-    Severity.CRITICAL: ("#ff4444", "#fff"),
-    Severity.HIGH:     ("#ff6b35", "#fff"),
-    Severity.MEDIUM:   ("#f0b429", "#0d1117"),
-    Severity.LOW:      ("#79c0ff", "#0d1117"),
-    Severity.INFO:     ("#8b949e", "#fff"),
+    # (background, text): the web UI's Night severity tokens (ui/src/styles/tokens.css) on its dark ink
+    Severity.CRITICAL: ("#ff645f", "#021611"),
+    Severity.HIGH:     ("#f79643", "#021611"),
+    Severity.MEDIUM:   ("#e7c952", "#021611"),
+    Severity.LOW:      ("#64bced", "#021611"),
+    Severity.INFO:     ("#93a39c", "#021611"),
 }
 
 _SEV_LABEL = {
@@ -44,11 +44,11 @@ _SEV_LABEL = {
 }
 
 _SOURCE_COLORS: dict[str, str] = {
-    "bandit":   "#f0b429",
-    "semgrep":  "#58a6ff",
-    "gitleaks": "#ff4444",
+    "bandit":   "#e7c952",
+    "semgrep":  "#56d1a3",
+    "gitleaks": "#ff645f",
     "llm":      "#a371f7",
-    "aegis-opt": "#3fb950",
+    "aegis-opt": "#76cf8a",
     "osv":      "#e3792b",
 }
 
@@ -67,7 +67,7 @@ def _sev_badge(sev: Severity) -> str:
 
 
 def _source_badge(source: str) -> str:
-    bg = _SOURCE_COLORS.get(source, "#58a6ff")
+    bg = _SOURCE_COLORS.get(source, "#56d1a3")
     return _badge(source.upper(), bg)
 
 
@@ -81,7 +81,7 @@ def _score_gauge(score: float, label: str, subtitle: str) -> str:
     return f"""
     <div class="gauge-card">
       <svg viewBox="0 0 120 70" width="200" height="120">
-        <circle cx="60" cy="60" r="54" fill="none" stroke="#21262d" stroke-width="10"
+        <circle cx="60" cy="60" r="54" fill="none" stroke="#1d3c34" stroke-width="10"
                 stroke-dasharray="339.3" stroke-dashoffset="0"
                 stroke-linecap="round" transform="rotate(-180 60 60)"/>
         <circle cx="60" cy="60" r="54" fill="none" stroke="{colour}" stroke-width="10"
@@ -92,7 +92,7 @@ def _score_gauge(score: float, label: str, subtitle: str) -> str:
               font-size="20" font-weight="700" font-family="Inter,system-ui,sans-serif">
           {score:.0f}
         </text>
-        <text x="60" y="65" text-anchor="middle" fill="#8b949e"
+        <text x="60" y="65" text-anchor="middle" fill="#8da59b"
               font-size="8" font-family="Inter,system-ui,sans-serif">
           {html.escape(rating)}
         </text>
@@ -136,10 +136,10 @@ def _finding_row(f: Finding, idx: int) -> str:
         patch_html = f"""
         <div class="detail-section">
           <div class="detail-label">AI Unified Diff Patch</div>
-          <pre class="evidence-block" style="border-left:3px solid #238636;color:#e6edf3"><code>{html.escape(f.fix_patch)}</code></pre>
+          <pre class="evidence-block" style="border-left:3px solid #5ac576;color:#e0f0e8"><code>{html.escape(f.fix_patch)}</code></pre>
         </div>"""
 
-    source_color = _SOURCE_COLORS.get(f.rule_source, "#58a6ff")
+    source_color = _SOURCE_COLORS.get(f.rule_source, "#56d1a3")
 
     return f"""
     <tr class="finding-row" onclick="toggleDetail('{detail_id}')" style="cursor:pointer">
@@ -221,12 +221,12 @@ def generate_html(result: ScanResult, output_path: Path) -> None:
   *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
 
   :root {{
-    --bg:       #0d1117;
-    --surface:  #161b22;
-    --border:   #21262d;
-    --text:     #c9d1d9;
-    --muted:    #8b949e;
-    --accent:   #58a6ff;
+    --bg:       #021611;
+    --surface:  #081f1a;
+    --border:   #1d3c34;
+    --text:     #bcd0c6;
+    --muted:    #8da59b;
+    --accent:   #56d1a3;
     --radius:   10px;
   }}
 
@@ -371,7 +371,7 @@ def generate_html(result: ScanResult, output_path: Path) -> None:
   /* Detail row */
   .detail-row td {{ padding: 0; }}
   .detail-content {{
-    background: #0d1117;
+    background: #021611;
     border-bottom: 1px solid var(--border);
     padding: 16px 20px;
     display: grid;
@@ -396,12 +396,12 @@ def generate_html(result: ScanResult, output_path: Path) -> None:
     font-size: 0.75rem;
     white-space: pre-wrap;
     word-break: break-all;
-    color: #f0e6d2;
+    color: #e0f0e8;
     overflow: auto;
     max-height: 200px;
   }}
   .detail-text {{ color: var(--text); font-size: 0.85rem; line-height: 1.6; }}
-  .fix-text {{ color: #3fb950; }}
+  .fix-text {{ color: #76cf8a; }}
 
   /* Footer */
   .footer {{
@@ -419,7 +419,7 @@ def generate_html(result: ScanResult, output_path: Path) -> None:
     border: 1px solid rgba(240,180,41,0.2);
     border-radius: var(--radius);
     padding: 10px 16px;
-    color: #f0b429;
+    color: #e7c952;
     font-size: 0.8rem;
     margin-bottom: 24px;
   }}
@@ -466,14 +466,14 @@ def generate_html(result: ScanResult, output_path: Path) -> None:
   </div>
   <div class="summary-card">
     <div class="label">Critical / High</div>
-    <div class="value" style="color:#ff4444">
+    <div class="value" style="color:#ff645f">
       {len(findings_by_sev.get(Severity.CRITICAL,[]))} / {len(findings_by_sev.get(Severity.HIGH,[]))}
     </div>
     <div class="sub">require immediate attention</div>
   </div>
   <div class="summary-card">
     <div class="label">Medium / Low</div>
-    <div class="value" style="color:#f0b429">
+    <div class="value" style="color:#e7c952">
       {len(findings_by_sev.get(Severity.MEDIUM,[]))} / {len(findings_by_sev.get(Severity.LOW,[]))}
     </div>
     <div class="sub">should be addressed</div>

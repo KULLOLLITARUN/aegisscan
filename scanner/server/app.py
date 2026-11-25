@@ -40,6 +40,31 @@ _INDEX_HTML = _DIST_DIR / "index.html"
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
 _MAX_JSON_BODY = 1024 * 1024  # scan requests are small JSON documents
+_MAX_EXPORT_BODY = 32 * 1024 * 1024  # an export carries a whole scan result (Django's is about 2 MB)
+_JSON_TYPE = "application/json"
+_TRIAGE_PATH = "/api/triage"
+# format -> (Content-Type, file extension)
+_EXPORT_FORMATS = {
+    "html": ("text/html; charset=utf-8", "html"),
+    "sarif": ("application/sarif+json", "sarif"),
+    "json": (_JSON_TYPE, "json"),
+}
+
+
+class ScanCancelled(BaseException):
+    """Raised from a progress callback once the browser has gone (Cancel, closed tab, lost network).
+
+    A BaseException on purpose: main.run and the LLM pool swallow ordinary exceptions from progress
+    callbacks so a UI bug can never break a scan, and this one has to get past them. The scan stops
+    at its next progress point, which can be after a long step such as Semgrep has finished.
+    """
+
+
+def _send_progress(sse: Any, payload: dict) -> None:
+    """Stream a progress event, then stop the scan if the browser is no longer listening."""
+    sse("progress", payload)
+    if sse.gone():
+        raise ScanCancelled()
 
 
 MAX_PREVIEW_FILES = 5000
@@ -195,7 +220,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
     def _send_json(self, data: Any, status: int = HTTPStatus.OK) -> None:
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", _JSON_TYPE)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -286,19 +311,17 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
 
         # ── Scan history ──────────────────────────────────────────────────
         if path == "/api/history":
-            if hosted.is_hosted():
-                self._send_json([])  # no history is kept or shared in hosted mode
-                return
-            qs = parse_qs(parsed.query)
-            limit = int(qs.get("limit", ["20"])[0])
-            from scanner.storage.history import ScanHistoryDB
-            db = ScanHistoryDB()
-            self._send_json(db.get_history(limit=limit))
+            self._handle_history_get(parsed.query)
             return
 
         # ── SSE live scan stream ─────────────────────────────────────────
         if path == "/api/scan/stream":
             self._handle_scan({k: v[0] for k, v in parse_qs(parsed.query).items()}, stream=True)
+            return
+
+        # ── kept results and triage decisions (local mode only) ──────────
+        if path in ("/api/last", _TRIAGE_PATH) or path.startswith("/api/scan/"):
+            self._handle_local_state_get(path, parsed.query)
             return
 
         # ── Vite asset files ─────────────────────────────────────────────
@@ -333,8 +356,118 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             if not self._api_gate():
                 return
             self._handle_upload()
+        elif path == "/api/export":
+            if not self._api_gate():
+                return
+            self._handle_export(parse_qs(urlparse(self.path).query).get("format", [""])[0])
+        elif path == _TRIAGE_PATH:
+            if not self._api_gate():
+                return
+            self._handle_triage_post(self._read_json_body())
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
+
+    # ------------------------------------------------------------------ kept results and triage
+    def _handle_history_get(self, query: str) -> None:
+        if hosted.is_hosted():
+            self._send_json([])  # no history is kept or shared in hosted mode
+            return
+        limit = int(parse_qs(query).get("limit", ["20"])[0])
+        from scanner.storage.history import ScanHistoryDB
+        from scanner.storage.results import kept_ids
+        kept = kept_ids()
+        rows = ScanHistoryDB().get_history(limit=limit)
+        self._send_json([{**row, "has_result": row.get("scan_id") in kept} for row in rows])
+
+    def _send_raw_json(self, text: str) -> None:
+        body = text.encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", _JSON_TYPE)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_local_state_get(self, path: str, query: str) -> None:
+        """GET /api/last, /api/scan/<id> and /api/triage. Hosted mode keeps none of this."""
+        if hosted.is_hosted():
+            self._send_json({"error": "Not available in hosted mode."}, status=HTTPStatus.NOT_FOUND)
+            return
+        if path == _TRIAGE_PATH:
+            from scanner.storage.triage import get_triage
+            target = parse_qs(query).get("target", [""])[0]
+            self._send_json(get_triage(target) if target else {})
+            return
+        from scanner.storage.results import latest_result, load_result
+        text = latest_result() if path == "/api/last" else load_result(path.rsplit("/", 1)[-1])
+        if text is None:
+            self._send_json({"error": "That scan's details were not kept."}, status=HTTPStatus.NOT_FOUND)
+            return
+        self._send_raw_json(text)
+
+    def _handle_triage_post(self, body: dict) -> None:
+        if hosted.is_hosted():
+            self._send_json({"error": "Not available in hosted mode."}, status=HTTPStatus.NOT_FOUND)
+            return
+        from scanner.storage.triage import get_triage, set_triage
+        target, key, status = body.get("target"), body.get("key"), body.get("status")
+        if not isinstance(target, str) or not isinstance(key, str) or not (status is None or isinstance(status, str)):
+            self._send_json({"error": "Send target, key and status (or null)."}, status=HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            set_triage(target, key, status)
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._send_json(get_triage(target))
+
+    # ------------------------------------------------------------------ export
+    def _handle_export(self, fmt: str) -> None:
+        """Render a scan result the browser already holds as an HTML report, SARIF or JSON download.
+
+        The body is validated against the ScanResult model before anything is rendered, and the HTML
+        generator escapes every value, so a hand-crafted body cannot inject markup into the report.
+        """
+        if fmt not in _EXPORT_FORMATS:
+            self._send_json({"error": "Unknown export format. Use html, sarif or json."}, status=HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            length = 0
+        if length <= 0 or length > _MAX_EXPORT_BODY:
+            self._send_json({"error": "Send the scan result as the request body (at most 32 MB)."},
+                            status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE if length > 0 else HTTPStatus.LENGTH_REQUIRED)
+            return
+        from scanner.models.scan import ScanResult
+        try:
+            result = ScanResult.model_validate_json(self.rfile.read(length))
+        except Exception:
+            self._send_json({"error": "That is not a valid scan result."}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        content_type, ext = _EXPORT_FORMATS[fmt]
+        if fmt == "json":
+            body = result.model_dump_json(indent=2).encode("utf-8")
+        else:
+            import tempfile
+            with tempfile.TemporaryDirectory(prefix="aegisscan-export-") as tmp:
+                out = Path(tmp) / f"report.{ext}"
+                if fmt == "html":
+                    from scanner.reporting.html_report import generate_html
+                    generate_html(result, out)
+                else:
+                    from scanner.reporting.sarif_report import generate_sarif
+                    generate_sarif(result, out)
+                body = out.read_bytes()
+
+        name = f"aegisscan-{result.scan_id[:8]}.{ext}"
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     # ------------------------------------------------------------------ upload (hosted mode)
     def _handle_upload(self) -> None:
@@ -404,6 +537,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         lock = threading.Lock()
         stop = threading.Event()
+        gone = threading.Event()   # set once a write fails: the browser cancelled or went away
 
         def sse(event: str, data: Any) -> None:
             payload = f"event: {event}\ndata: {json.dumps(data)}\n\n"
@@ -412,7 +546,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write(payload.encode("utf-8"))
                     self.wfile.flush()
                 except Exception:
-                    pass
+                    gone.set()
 
         def heartbeat() -> None:
             # A quiet scan step (Semgrep can run for minutes) sends no events, and proxies and
@@ -424,10 +558,12 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                         self.wfile.write(b": keepalive\n\n")
                         self.wfile.flush()
                     except Exception:
+                        gone.set()
                         return
 
         threading.Thread(target=heartbeat, name="aegisscan-sse-keepalive", daemon=True).start()
         sse.close = stop.set  # type: ignore[attr-defined]
+        sse.gone = gone.is_set  # type: ignore[attr-defined]
         return sse
 
     # ------------------------------------------------------------------ local scans
@@ -459,7 +595,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             from main import run
 
             def on_progress(phase: str, pct: int, detail: str = "") -> None:
-                sse("progress", {
+                _send_progress(sse, {
                     "phase": f"{phase}: {detail}" if detail else phase,
                     "file": "",
                     "pct": pct,
@@ -490,9 +626,13 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                 root_logger.removeHandler(log_handler)
                 root_logger.setLevel(prev_level)
 
+            from scanner.storage.results import save_result
+            save_result(result)
             sse("progress", {"phase": "Complete", "file": "", "pct": 100, "found": len(result.findings)})
             sse("complete", json.loads(result.model_dump_json()))
 
+        except ScanCancelled:
+            log.info("Scan stopped: the browser cancelled it or disconnected")
         except Exception as exc:
             import traceback
             log.error("SSE scan error: %s\n%s", exc, traceback.format_exc())
@@ -513,6 +653,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                 generate_patches=p["generate_patches"],
                 privacy=p["privacy"],
             )
+            from scanner.storage.results import save_result
+            save_result(result)
             self._send_json(json.loads(result.model_dump_json()))
         except Exception as exc:
             import traceback
@@ -602,7 +744,7 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
 
         def on_progress(phase: str, pct: int, detail: str = "") -> None:
             if sse:
-                sse("progress", {
+                _send_progress(sse, {
                     "phase": scrub(f"{phase}: {detail}" if detail else phase),
                     "file": "",
                     "pct": pct,
@@ -650,6 +792,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             result = self._hosted_run(target, label, p, on_finish, sse=sse, prepare=prepare)
             sse("progress", {"phase": "Complete", "file": "", "pct": 100, "found": len(result.findings)})
             sse("complete", json.loads(result.model_dump_json()))
+        except ScanCancelled:
+            log.info("Hosted scan stopped: the browser cancelled it or disconnected")
         except hosted.ScanTimeout as exc:
             sse("error", {"error": str(exc)})
         except Exception as exc:

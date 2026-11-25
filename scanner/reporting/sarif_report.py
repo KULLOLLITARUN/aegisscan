@@ -150,9 +150,9 @@ def generate_sarif(
                         },
                     }
                 },
-                "originalUriBaseIds": {
-                    "%SRCROOT%": {"uri": target.as_uri()},
-                },
+                # SARIF needs an absolute URI here. A hosted-mode result carries a label such as
+                # "owner-repo" instead of a server path, so there is no root to name: leave it out.
+                **({"originalUriBaseIds": {"%SRCROOT%": {"uri": target.as_uri()}}} if target.is_absolute() else {}),
                 "results": results,
                 "invocations": [
                     {

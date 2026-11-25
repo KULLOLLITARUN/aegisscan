@@ -2,10 +2,10 @@ import { createContext, useContext, useState, useCallback } from 'react'
 
 const ThemeContext = createContext(null)
 
-// index.html stamps data-theme (day | night) before React mounts to avoid a flash.
+// index.html stamps data-theme (day | night) before React mounts to avoid a flash. Night is the default.
 function initialTheme() {
-  if (typeof document === 'undefined') return 'day'
-  return document.documentElement.dataset.theme === 'night' ? 'night' : 'day'
+  if (typeof document === 'undefined') return 'night'
+  return document.documentElement.dataset.theme === 'day' ? 'day' : 'night'
 }
 
 export function ThemeProvider({ children }) {

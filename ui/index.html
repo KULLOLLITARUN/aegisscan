@@ -12,10 +12,11 @@
     <script>
       // Set theme before first paint to avoid a flash of the wrong theme.
       (function () {
-        var t = 'day';
+        // Night is the default; a choice saved by the Day / Night buttons wins, the system setting does not.
+        var t = 'night';
         try {
-          t = localStorage.getItem('aegis-theme3') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day');
-        } catch (e) { /* storage unavailable: default to day */ }
+          t = localStorage.getItem('aegis-theme3') || 'night';
+        } catch (e) { /* storage unavailable: default to night */ }
         document.documentElement.setAttribute('data-theme', t === 'night' ? 'night' : 'day');
       })();
     </script>

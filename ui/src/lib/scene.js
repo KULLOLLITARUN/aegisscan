@@ -96,9 +96,10 @@ export function buildScene(result, maxPins = MAX_PINS) {
 }
 
 export const MAX_LIVE_TILES = 240
-const LIVE_W = 30
-const LIVE_H = 22
-const LIVE_GAP = 6
+const LIVE_FLOOR = 560 // the width a typical final floor has, so the live floor is about the same size
+const LIVE_GAP = 8
+const LIVE_MIN_W = 22
+const LIVE_MAX_W = 110
 
 /**
  * The floor drawn while a scan is still running: one small tile per analysed file, from the file list the
@@ -112,11 +113,14 @@ export function buildLiveScene(files, maxTiles = MAX_LIVE_TILES) {
   const shown = []
   for (let i = 0; i < Math.min(list.length, maxTiles); i++) shown.push(list[Math.floor(i * step)])
   const cols = Math.max(1, Math.min(24, Math.ceil(Math.sqrt(shown.length * 2.2))))
-  const cellW = LIVE_W + LIVE_GAP
-  const cellH = LIVE_H + LIVE_GAP
+  // Tiles are as big as the target floor width allows (few files: chunky tiles; many: small ones).
+  const tileW = Math.max(LIVE_MIN_W, Math.min(LIVE_MAX_W, Math.floor(LIVE_FLOOR / cols) - LIVE_GAP))
+  const tileH = Math.round(tileW * 0.7)
+  const cellW = tileW + LIVE_GAP
+  const cellH = tileH + LIVE_GAP
   const tiles = shown.map((f, i) => {
     const path = String(f.path)
-    return { id: path, label: baseName(path), path, x: (i % cols) * cellW, y: Math.floor(i / cols) * cellH, w: LIVE_W, h: LIVE_H, worst: null, lines: f.lines ?? 0, count: 0 }
+    return { id: path, label: baseName(path), path, x: (i % cols) * cellW, y: Math.floor(i / cols) * cellH, w: tileW, h: tileH, worst: null, lines: f.lines ?? 0, count: 0 }
   })
   const rows = Math.max(1, Math.ceil(shown.length / cols))
   return {

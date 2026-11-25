@@ -5,7 +5,12 @@ import { useScan } from '../../context/ScanContext'
 
 const nf = new Intl.NumberFormat('en', { maximumFractionDigits: 1, minimumFractionDigits: 1 })
 
+const MAX_STEPS = 8
+
 function Live({ steps, liveSec }) {
+  // A long scan reports many steps; show the latest ones so the list never runs into the text below it.
+  const shown = steps.slice(-MAX_STEPS)
+  const hidden = steps.length - shown.length
   return (
     <div role="status" aria-label="Scan in progress, score not ready">
       <div className="ag-label">Security score</div>
@@ -14,10 +19,11 @@ function Live({ steps, liveSec }) {
         <p className="ag-live-note">The score appears when the scan finishes. Some steps, like Semgrep, can take a few minutes.</p>
       </div>
       <ol className="ag-steps ag-mono" aria-label="Scan steps so far">
-        {steps.map((s, i) => {
-          const active = i === steps.length - 1
+        {hidden > 0 && <li className="done"><span className="ag-step-mark" aria-hidden="true">+</span><span>{hidden} earlier steps</span><span className="ag-step-state">done</span></li>}
+        {shown.map((s, i) => {
+          const active = i === shown.length - 1
           return (
-            <li key={s} className={active ? 'active' : 'done'}>
+            <li key={`${s}-${i}`} className={active ? 'active' : 'done'}>
               <span className="ag-step-mark" aria-hidden="true">{active ? '>' : '+'}</span>
               <span>{s}</span>
               <span className="ag-step-state">{active ? 'running' : 'done'}</span>

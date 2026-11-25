@@ -142,3 +142,17 @@ test('buildLiveScene keeps the count of discovered files, which can exceed the a
   assert.equal(s.discovered, 4)
   assert.equal(buildLiveScene({ files: [{ path: 'a.py', lines: 1 }], total: 1 }).discovered, 1)
 })
+
+// ---- live steps: repeated counters collapse to one line ----
+import { liveSteps } from '../src/lib/steps.js'
+
+test('liveSteps keeps one line for a repeating "n/total" counter, showing the latest count', () => {
+  const ev = (phase) => ({ kind: 'progress', phase })
+  const steps = liveSteps([ev('Chunking files'), ev('LLM analysis: 0/934 chunks'), ev('LLM analysis: 1/934 chunks'), ev('LLM analysis: 22/934 chunks')])
+  assert.deepEqual(steps, ['Chunking files', 'LLM analysis: 22/934 chunks'])
+})
+
+test('liveSteps still drops "Static analysis" once a tool step follows it', () => {
+  const ev = (phase) => ({ kind: 'progress', phase })
+  assert.deepEqual(liveSteps([ev('Static analysis'), ev('Static analysis: Bandit'), ev('Static analysis: Bandit')]), ['Static analysis: Bandit'])
+})

@@ -123,3 +123,61 @@ def test_make_console_safe_survives_legacy_codepage(monkeypatch) -> None:
     print("non‑breaking hyphen")  # U+2011 has no cp1252 mapping; used to raise
     fake.flush()
     assert b"non" in buf.getvalue()
+
+
+def test_run_reports_the_analysable_files_once(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "a.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("z = 3\n", encoding="utf-8")
+    (tmp_path / "blob.bin").write_bytes(b"\x00\x01\x02\x03")
+    _fast_tools(monkeypatch)
+    seen: list[list[dict]] = []
+    main.run(tmp_path, static_only=True, on_files=seen.append)
+
+    assert len(seen) == 1
+    by_path = {f["path"]: f["lines"] for f in seen[0]}
+    assert by_path == {"b.py": 1, "pkg/a.py": 2}
+
+
+def test_run_survives_a_failing_on_files_callback(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    _fast_tools(monkeypatch)
+
+    def bad(_files):
+        raise RuntimeError("ui exploded")
+
+    result, _, _ = main.run(tmp_path, static_only=True, on_files=bad)
+    assert result.security_score is not None
+
+
+def _make_finding(path: Path, severity: str = "high"):
+    from scanner.models.finding import Finding
+
+    return Finding(
+        file_path=path, line_start=1, line_end=1, severity=severity, confidence=0.9, category="injection",
+        issue_type="x", evidence="e", explanation="e", rule_source="bandit",
+    )
+
+
+def test_run_all_tools_reports_findings_after_each_tool(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(runner, "run_bandit", lambda *a, **k: [_make_finding(tmp_path / "a.py")])
+    for name in ("run_semgrep", "run_gitleaks", "run_osv", "run_optimizer"):
+        monkeypatch.setattr(runner, name, lambda *a, **k: [])
+    seen: list[tuple[str, int]] = []
+    runner.run_all_tools(tmp_path, on_findings=lambda tool, fs: seen.append((tool, len(fs))))
+    assert seen == [("Bandit", 1)], "tools with no findings are not reported"
+
+
+def test_run_streams_preview_grouped_by_file(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    low = _make_finding(tmp_path / "a.py", "low")
+    crit = _make_finding(tmp_path / "a.py", "critical")
+
+    def fake(target, progress=None, only_files=None, privacy="standard", on_findings=None):
+        on_findings("Bandit", [low, crit])
+        return [low, crit], ["bandit"]
+
+    monkeypatch.setattr(main, "run_all_tools", fake)
+    seen: list[tuple[str, list[dict]]] = []
+    main.run(tmp_path, static_only=True, on_findings=lambda tool, fs: seen.append((tool, fs)))
+    assert seen == [("Bandit", [{"path": "a.py", "worst": "critical", "count": 2}])]

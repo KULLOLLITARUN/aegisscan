@@ -94,3 +94,33 @@ export function buildScene(result, maxPins = MAX_PINS) {
   }
   return { tiles, pins, floorW: FLOOR_W, floorH, hiddenPins, hiddenFiles, cleanFiles, totalFindings: findings.length }
 }
+
+export const MAX_LIVE_TILES = 240
+const LIVE_W = 30
+const LIVE_H = 22
+const LIVE_GAP = 6
+
+/**
+ * The floor drawn while a scan is still running: one small tile per analysed file, from the file list the
+ * scanner streams once it has crawled and classified the target. Files are sorted by path so folders sit
+ * together. Past MAX_LIVE_TILES the list is sampled evenly and hiddenFiles says how many are not drawn.
+ */
+export function buildLiveScene(files, maxTiles = MAX_LIVE_TILES) {
+  const list = [...(files?.files ?? [])].sort((a, b) => String(a.path).localeCompare(String(b.path)))
+  const total = Math.max(files?.total ?? 0, list.length)
+  const step = list.length > maxTiles ? list.length / maxTiles : 1
+  const shown = []
+  for (let i = 0; i < Math.min(list.length, maxTiles); i++) shown.push(list[Math.floor(i * step)])
+  const cols = Math.max(1, Math.min(24, Math.ceil(Math.sqrt(shown.length * 2.2))))
+  const cellW = LIVE_W + LIVE_GAP
+  const cellH = LIVE_H + LIVE_GAP
+  const tiles = shown.map((f, i) => {
+    const path = String(f.path)
+    return { id: path, label: baseName(path), path, x: (i % cols) * cellW, y: Math.floor(i / cols) * cellH, w: LIVE_W, h: LIVE_H, worst: null, lines: f.lines ?? 0, count: 0 }
+  })
+  const rows = Math.max(1, Math.ceil(shown.length / cols))
+  return {
+    tiles, pins: [], floorW: Math.max(160, cols * cellW - LIVE_GAP), floorH: Math.max(120, rows * cellH - LIVE_GAP),
+    hiddenPins: 0, hiddenFiles: Math.max(0, total - shown.length), cleanFiles: 0, totalFindings: 0, live: true, total,
+  }
+}

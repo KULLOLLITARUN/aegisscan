@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useScan } from '../context/ScanContext'
-import { buildScene } from '../lib/scene'
+import { buildScene, buildLiveScene } from '../lib/scene'
 import { buildTimeline, pctAt } from '../lib/timeline'
 import { usePlayback } from '../lib/usePlayback'
 import ScanCanvas from '../components/canvas/ScanCanvas'
@@ -11,7 +11,7 @@ import { liveSteps } from '../lib/steps'
 /** Scan view: canvas with verdict, scrubbable timeline and the docked inspector. */
 export default function ScanPage() {
   const {
-    scanResult, scanning, scanError, logs, history, historyStatus, recording, progress,
+    scanResult, scanning, scanError, logs, history, historyStatus, recording, progress, liveFiles, liveHits,
     selectedId, setSelectedId, startScan,
   } = useScan()
   const [tab, setTab] = useState('queue')
@@ -24,6 +24,8 @@ export default function ScanPage() {
   useEffect(() => { if (scanning) setTab('activity') }, [scanning])
 
   const scene = useMemo(() => buildScene(scanResult), [scanResult])
+  // While scanning, the floor is the real file list the scanner streams, not the (still empty) result.
+  const liveScene = useMemo(() => (scanning && liveFiles?.files?.length ? buildLiveScene(liveFiles) : null), [scanning, liveFiles])
 
   // Live elapsed time while the scan runs (the stream gives progress, not a clock).
   const [liveSec, setLiveSec] = useState(0)
@@ -62,7 +64,13 @@ export default function ScanPage() {
   // What the sweep has reached at the (0.1 s resolution) replay time.
   const planeX = tl.total > 0 ? (pctAt(tl.points, playback.t) / 100) * scene.floorW : scene.floorW
   const visible = useMemo(() => new Set(scene.pins.filter((p) => p.x <= planeX).map((p) => p.id)), [scene.pins, planeX])
-  const tilesDone = useMemo(() => new Set(scene.tiles.filter((t) => t.x + t.w <= planeX).map((t) => t.id)), [scene.tiles, planeX])
+  // Live: the sweep follows the scanner's real progress percentage across the floor. The scanner reports
+  // progress per tool, not per file, so which tile lights when is an illustration of that progress.
+  const livePlaneX = liveScene ? (Math.min(100, progress.pct) / 100) * liveScene.floorW : 0
+  const tilesDone = useMemo(
+    () => new Set((liveScene ? liveScene.tiles : scene.tiles).filter((t) => t.x + t.w <= (liveScene ? livePlaneX : planeX)).map((t) => t.id)),
+    [liveScene, scene.tiles, planeX, livePlaneX],
+  )
 
   const onSelect = useCallback((id) => {
     setSelectedId(id)
@@ -74,6 +82,8 @@ export default function ScanPage() {
       <main className="ag-canvas">
         <ScanCanvas
           scene={scene}
+          liveScene={liveScene}
+          liveHits={liveHits}
           result={scanResult}
           scanning={scanning}
           error={scanError}

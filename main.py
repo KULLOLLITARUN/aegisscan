@@ -284,6 +284,25 @@ def _print_report(
 # Core pipeline
 # ---------------------------------------------------------------------------
 
+_SEV_ORDER = ("critical", "high", "medium", "low", "info")
+
+
+def _by_file(findings: list[Finding], root: Path) -> list[dict]:
+    """Group findings by file for the live preview: ``[{"path", "worst", "count"}]``, worst first."""
+    groups: dict[str, dict] = {}
+    for f in findings:
+        try:
+            rel = Path(f.file_path).resolve().relative_to(root).as_posix()
+        except (ValueError, OSError):
+            rel = Path(f.file_path).name
+        sev = f.severity.value if hasattr(f.severity, "value") else str(f.severity)
+        g = groups.setdefault(rel, {"path": rel, "worst": sev, "count": 0})
+        g["count"] += 1
+        if _SEV_ORDER.index(sev) < _SEV_ORDER.index(g["worst"]):
+            g["worst"] = sev
+    return sorted(groups.values(), key=lambda g: (_SEV_ORDER.index(g["worst"]), g["path"]))
+
+
 def run(
     path: Path,
     deep: bool = False,
@@ -295,6 +314,8 @@ def run(
     generate_patches: bool = False,
     progress: Callable[[str, int, str], None] | None = None,
     record_history: bool = True,
+    on_files: Callable[[list[dict]], None] | None = None,
+    on_findings: Callable[[str, list[dict]], None] | None = None,
 ) -> tuple[ScanResult, list[FileInfo], list[CorrelationGroup]]:
     """
     V6/V8 pipeline:
@@ -303,6 +324,15 @@ def run(
 
     *progress*, if given, is called as ``progress(phase, pct, detail)`` at each
     pipeline phase (pct is 0-100). Exceptions it raises are swallowed.
+
+    *on_files*, if given, is called once after classification with the files that will be analysed,
+    as ``[{"path": <posix path relative to the target>, "lines": <line count>}]``. The live UI draws
+    its floor from it. Exceptions it raises are swallowed.
+
+    *on_findings*, if given, is called as ``on_findings(tool, [{"path", "worst", "count"}])`` after each
+    static tool finishes: that tool's raw findings grouped by file (path relative to the target, worst
+    severity, count). They are preliminary: deduplication, context weighting and suppression come
+    later, so the final result can differ. Exceptions it raises are swallowed.
     """
     def _progress(phase: str, pct: int, detail: str = "") -> None:
         if progress is None:
@@ -348,6 +378,22 @@ def run(
         if fi.language:
             lang_counter[fi.language] += 1
 
+    if on_files is not None:
+        try:
+            root = path.resolve()
+            listing = []
+            for fi in all_files:
+                if fi.is_binary or fi.is_oversized or fi.is_generated:
+                    continue
+                try:
+                    rel = fi.path.resolve().relative_to(root).as_posix()
+                except ValueError:
+                    rel = fi.path.name
+                listing.append({"path": rel, "lines": fi.line_count or 0})
+            on_files(listing)
+        except Exception:
+            log.debug("on_files callback failed", exc_info=True)
+
     # ---- 3. Chunk ----
     _progress("Chunking files", 15)
     all_chunks = []
@@ -357,6 +403,11 @@ def run(
 
     # ---- 4. Static analysis ----
     _progress("Static analysis", 25)
+    tool_kwargs: dict = {}
+    if on_findings is not None:
+        def _live(tool: str, found: list[Finding]) -> None:
+            on_findings(tool, _by_file(found, path.resolve()))
+        tool_kwargs["on_findings"] = _live
     static_findings, tools_run = run_all_tools(
         path.resolve(),
         progress=lambda tool: _progress("Static analysis", 30, tool),
@@ -364,6 +415,7 @@ def run(
         # down to them above) instead of the whole tree. None = scan everything.
         only_files=discovered_files if changed is not None else None,
         privacy=privacy,
+        **tool_kwargs,
     )
     if changed is not None:
         # Safety net: a tool must never blame a change for issues in files that did not change,

@@ -17,7 +17,7 @@ const pinLabel = (f, sev, rel) =>
  * finding. Drag or arrow keys rotate, wheel or +/- zoom, selecting a finding moves the camera to it.
  */
 export default function ScanCanvas({
-  scene, result, scanning, error, history, historyStatus,
+  scene, liveScene, liveHits, result, scanning, error, history, historyStatus,
   selectedId, onSelect, hoverId, onHover, planeRef, visible, tilesDone, livePlane, phase, steps, liveSec, onRun,
 }) {
   const { hosted } = useScan()
@@ -34,6 +34,7 @@ export default function ScanCanvas({
   }, [sway])
 
   const { tiles, pins, floorW, floorH } = scene
+  const live = scanning && liveScene ? liveScene : null
   const selectedPin = pins.find((p) => p.id === selectedId)
   const selectedTile = selectedPin?.tileId
 
@@ -106,7 +107,7 @@ export default function ScanCanvas({
   const noScan = !result && !scanning && !error
   const loading = scanning
   const hovered = hoverId ? pins.find((p) => p.id === hoverId) : null
-  const fl = loading ? { w: 560, h: 270 } : { w: floorW, h: floorH }
+  const fl = live ? { w: live.floorW, h: live.floorH } : loading ? { w: 560, h: 270 } : { w: floorW, h: floorH }
   const files = result?.files_analyzed ?? 0
   const filesWithFindings = tiles.length + scene.hiddenFiles
   const showPins = !loading && !error
@@ -137,6 +138,19 @@ export default function ScanCanvas({
         style={{ width: fl.w, height: fl.h, margin: `${-fl.h / 2}px 0 0 ${-fl.w / 2}px` }}
       >
         <div className="ag-floor" style={{ left: -40, top: -40, width: fl.w + 80, height: fl.h + 80 }} />
+        {live && live.tiles.map((t) => {
+          const hit = liveHits?.byPath?.[t.path]
+          const box = { left: t.x, top: t.y, width: t.w, height: t.h }
+          return (
+            <div
+              key={t.id}
+              className={`ag-tile live${tilesDone.has(t.id) ? ' scanned' : ''}${hit ? ' hit' : ''}`}
+              style={hit ? { ...box, '--sev': `var(--sev-${hit.worst})` } : box}
+              data-file={t.path}
+              title={hit ? `${t.path}: ${hit.count} so far, worst ${SEVERITY_LABEL[hit.worst]}` : t.path}
+            />
+          )
+        })}
         {showPins && tiles.map((t) => (
           <div
             key={t.id}
@@ -203,7 +217,11 @@ export default function ScanCanvas({
             ? `${SEVERITY_LABEL[hovered.sev]}: ${hovered.finding.issue_type}, ${hovered.tileId}:${hovered.finding.line_start}, ${Math.round((hovered.finding.confidence ?? 0) * 100)}% confidence`
             : DEFAULT_HINT}
         </div>
-        {notes.map((n) => <div key={n}>{n}</div>)}
+        {live && <div>{`Scanning ${live.total.toLocaleString()} ${live.total === 1 ? 'file' : 'files'}${live.hiddenFiles ? `, ${live.hiddenFiles.toLocaleString()} not drawn` : ''}. The sweep follows the scanner's real progress, which is reported per tool, so which tile lights when is illustrative.`}</div>}
+        {live && liveHits && (
+          <div>{`Found so far (preliminary, before deduplication): ${liveHits.total.toLocaleString()} in ${Object.keys(liveHits.byPath).length.toLocaleString()} ${Object.keys(liveHits.byPath).length === 1 ? 'file' : 'files'}, last from ${liveHits.tool}.`}</div>
+        )}
+        {!live && notes.map((n) => <div key={n}>{n}</div>)}
         {result && !loading && !error && scene.totalFindings === 0 && (
           <div>The floor is clear: {files} {files === 1 ? 'file' : 'files'} analysed, no findings.</div>
         )}

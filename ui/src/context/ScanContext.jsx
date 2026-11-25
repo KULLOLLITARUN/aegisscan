@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { ApiError, authHeaders, loadToken, readSse, saveToken, toApiError } from '../lib/api'
 import { zipFiles } from '../lib/upload'
+import { mergePreview } from '../lib/liveHits'
 
 const ScanContext = createContext(null)
 
@@ -36,6 +37,9 @@ export function ScanProvider({ children }) {
   const [historyStatus, setHistoryStatus] = useState('loading') // loading | ready | error
   const [scanError, setScanError] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
+  // Preliminary findings streamed as each static tool finishes: { byPath: {path: {worst, count}}, total, tool }.
+  const [liveHits, setLiveHits] = useState(null)
+  const [liveFiles, setLiveFiles] = useState(null) // { files: [{path, lines}], total } streamed once the scanner has crawled the target
   // Timestamped progress/log events for the timeline. t is ms since the scan was requested.
   // Recorded client-side from the stream; the API exposes no phase timings of its own.
   const [recording, setRecording] = useState({ events: [], durationMs: 0, live: false, startedAt: 0 })
@@ -177,6 +181,8 @@ export function ScanProvider({ children }) {
     setScanning(true)
     setScanError(null)
     setSelectedId(null)
+    setLiveFiles(null)
+    setLiveHits(null)
     startedAtRef.current = performance.now()
     setRecording({ events: [], durationMs: 0, live: true, startedAt: startedAtRef.current })
     setProgress({ phase: 'Initializing scanner...', file: '', pct: 1, found: 0 })
@@ -188,6 +194,10 @@ export function ScanProvider({ children }) {
         setProgress(d)
         record({ kind: 'progress', level: 'info', phase: d.phase, pct: d.pct, found: d.found, message: d.phase })
         setLogs((prev) => [...prev, makeLog('info', d.file ? `${d.phase} — ${d.file}` : d.phase)])
+      } else if (name === 'files') {
+        setLiveFiles(d)
+      } else if (name === 'preview') {
+        setLiveHits((prev) => mergePreview(prev, d))
       } else if (name === 'log') {
         // Backend log records (provider rate limits, tool errors, ...), see scanner/server/app.py.
         record({ kind: 'log', level: pyLevelToLogLevel(d.level), message: d.message })
@@ -264,12 +274,12 @@ export function ScanProvider({ children }) {
     scanning, progress,
     logs,
     history, fetchHistory, historyStatus,
-    scanError, selectedId, setSelectedId, recording,
+    scanError, selectedId, setSelectedId, recording, liveFiles, liveHits,
     targetPath, setTargetPath,
     source, setSource,
     options, setOptions,
     startScan,
-  }), [config, hosted, needsToken, token, setToken, authError, scanResult, scanning, progress, logs, history, fetchHistory, historyStatus, scanError, selectedId, recording, targetPath, source, options, startScan])
+  }), [config, hosted, needsToken, token, setToken, authError, scanResult, scanning, progress, logs, history, fetchHistory, historyStatus, scanError, selectedId, recording, liveFiles, liveHits, targetPath, source, options, startScan])
 
   return (
     <ScanContext.Provider value={value}>

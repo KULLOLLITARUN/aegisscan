@@ -86,6 +86,14 @@ select.ag-input { padding-right: var(--space-md); }
 .ag-tile.focus { border-width: 2px; border-color: var(--ink); }
 .ag-tile span { position: absolute; left: var(--space-xs); bottom: var(--space-2xs); z-index: 1; font-family: var(--font-outlier); font-size: var(--text-xs); color: var(--muted); max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ag-tile.scanned span { color: var(--ink); }
+.ag-tile.live { border-color: var(--line); background: color-mix(in oklab, var(--paper-3) 90%, transparent); transition: background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out); }
+.ag-tile.live::before { transform: translateZ(-3px); }
+.ag-tile.live.scanned { border-color: var(--muted-2); background: color-mix(in oklab, var(--ink) 16%, var(--paper-2)); animation: ag-land var(--dur-long) var(--ease-land); }
+/* A tile that has a preliminary finding takes its severity colour and sends out one ring. */
+.ag-tile.live.hit { border-color: var(--sev); background: color-mix(in oklab, var(--sev) 40%, var(--paper-2)); }
+.ag-tile.live.hit::after { content: ""; position: absolute; inset: -2px; border: 2px solid var(--sev); pointer-events: none; animation: ag-ring 900ms var(--ease-out) 1 both; }
+@keyframes ag-ring { 0% { opacity: 0.9; transform: scale(1); } 100% { opacity: 0; transform: scale(2.6); } }
+@keyframes ag-land { 0% { transform: translateZ(14px); } 100% { transform: none; } }
 .ag-mark { width: 16px; height: 16px; margin: calc(var(--space-xs) * -1) 0 0 calc(var(--space-xs) * -1); border: var(--rule-hair) solid var(--sev); background: color-mix(in oklab, var(--sev) 25%, transparent); }
 .ag-wall { left: 0; top: -120px; height: 120px; transform-origin: 0 100%; border-top: 2px solid var(--accent); background: linear-gradient(to top, color-mix(in oklab, var(--accent) 24%, transparent), transparent); transform: translate3d(calc(var(--plane, 0) * 1px), 0, 0) rotateZ(90deg) rotateX(-90deg); pointer-events: none; }
 .ag-wall { opacity: var(--wo, 1); }

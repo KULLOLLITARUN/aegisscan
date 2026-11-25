@@ -5,7 +5,7 @@ Serves the React production bundle and REST/SSE API endpoints.
   GET  /               → React SPA (dist/index.html)
   GET  /assets/*       → Vite build static assets
   GET  /api/history    → JSON scan history from SQLite
-  GET  /api/scan/stream→ SSE live scan progress stream (events: progress, log, complete, error)
+  GET  /api/scan/stream→ SSE live scan progress stream (events: progress, files, preview, log, complete, error)
   POST /api/scan       → Synchronous scan (JSON response)
 """
 from __future__ import annotations
@@ -40,6 +40,19 @@ _INDEX_HTML = _DIST_DIR / "index.html"
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
 _MAX_JSON_BODY = 1024 * 1024  # scan requests are small JSON documents
+
+
+MAX_PREVIEW_FILES = 5000
+
+
+def _send_files(sse: Any, files: list[dict]) -> None:
+    """Stream the list of files about to be analysed, so the live canvas can draw its floor."""
+    sse("files", {"files": files[:MAX_PREVIEW_FILES], "total": len(files)})
+
+
+def _send_preview(sse: Any, tool: str, files: list[dict]) -> None:
+    """Stream one static tool's findings, grouped by file, as soon as the tool finishes (preliminary)."""
+    sse("preview", {"tool": tool, "files": files[:MAX_PREVIEW_FILES]})
 
 
 def _sse_keepalive_seconds() -> float:
@@ -470,6 +483,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                     generate_patches=p["generate_patches"],
                     privacy=p["privacy"],
                     progress=on_progress,
+                    on_files=lambda files: _send_files(sse, files),
+                    on_findings=lambda tool, files: _send_preview(sse, tool, files),
                 )
             finally:
                 root_logger.removeHandler(log_handler)
@@ -615,6 +630,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
                     generate_patches=p["generate_patches"],
                     privacy=p["privacy"],
                     progress=on_progress if sse else None,
+                    on_files=(lambda files: _send_files(sse, files)) if sse else None,
+                    on_findings=(lambda tool, files: _send_preview(sse, tool, files)) if sse else None,
                     record_history=False,
                 )
                 return result

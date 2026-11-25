@@ -35,12 +35,17 @@ def run_all_tools(
     progress: Callable[[str], None] | None = None,
     only_files: Iterable[Path] | None = None,
     privacy: str = "standard",
+    on_findings: Callable[[str, list[Finding]], None] | None = None,
 ) -> tuple[list[Finding], list[str]]:
     """
     Run all configured static analysis tools against *target*.
 
     *only_files* (``--changed-only``) limits every tool to those files instead of the whole tree;
     an empty collection means there is nothing to scan and no tool is started.
+
+    *on_findings*, if given, is called as ``on_findings(tool, findings)`` as soon as each tool has
+    finished, before the next one starts, so a live UI can show results as they arrive. Exceptions it
+    raises are swallowed.
 
     Returns:
         findings    : Combined list[Finding] from all tools that ran.
@@ -53,6 +58,13 @@ def run_all_tools(
     def _step(name: str) -> None:
         if progress:
             progress(name)
+
+    def _done(name: str, found: list[Finding]) -> None:
+        if on_findings and found:
+            try:
+                on_findings(name, list(found))
+            except Exception:
+                log.debug("on_findings callback failed", exc_info=True)
 
     # --- Bandit (Python SAST, always available via pip) ---
     config = load_config(target)
@@ -67,6 +79,7 @@ def run_all_tools(
 
     _step("Bandit")
     bandit_findings = run_bandit(target, config.exclude_dirs, files)
+    _done("Bandit", bandit_findings)
     if bandit_findings:
         all_findings.extend(bandit_findings)
         tools_run.append("bandit")
@@ -76,6 +89,7 @@ def run_all_tools(
     # --- Semgrep (optional CLI) ---
     _step("Semgrep")
     semgrep_findings = run_semgrep(target, files, config.exclude_dirs)
+    _done("Semgrep", semgrep_findings)
     if semgrep_findings:
         all_findings.extend(semgrep_findings)
         tools_run.append("semgrep")
@@ -85,6 +99,7 @@ def run_all_tools(
     # --- Gitleaks (optional CLI) ---
     _step("Gitleaks")
     gitleaks_findings = run_gitleaks(target, files, config.exclude_dirs)
+    _done("Gitleaks", gitleaks_findings)
     if gitleaks_findings:
         all_findings.extend(gitleaks_findings)
         tools_run.append("gitleaks")
@@ -98,6 +113,7 @@ def run_all_tools(
     else:
         _step("OSV-Scanner")
         osv_findings = run_osv(target, files, config.exclude_dirs)
+        _done("OSV-Scanner", osv_findings)
         if osv_findings:
             all_findings.extend(osv_findings)
             tools_run.append("osv-scanner")
@@ -105,6 +121,7 @@ def run_all_tools(
     # --- Optimizer (pure-Python AST checks, always available) ---
     _step("Optimizer")
     opt_findings = run_optimizer(target, set(config.exclude_dirs), files)
+    _done("Optimizer", opt_findings)
     if opt_findings:
         all_findings.extend(opt_findings)
         tools_run.append("aegis-optimizer")

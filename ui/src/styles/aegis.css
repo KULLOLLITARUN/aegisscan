@@ -181,6 +181,9 @@ select.ag-input { padding-right: var(--space-md); }
 .ag-timeline { height: var(--timeline-h); flex: none; display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--space-lg); align-items: center; padding: 0 var(--space-xl); border-top: var(--rule-hair) solid var(--line); background: var(--paper-2); }
 .ag-tl-ctl { display: grid; gap: var(--space-xs); }
 .ag-tl-ctl .ag-clock { font-size: var(--text-sm); color: var(--ink-2); }
+.ag-tl-ctl:has(.ag-found) { gap: var(--space-3xs); }
+.ag-found { font-size: var(--text-sm); color: var(--ink); display: grid; line-height: 1.2; white-space: nowrap; }
+.ag-found small { font-size: var(--text-xs); color: var(--muted); }
 .ag-tl-main { display: grid; gap: var(--space-xs); min-width: 0; }
 .ag-track { position: relative; height: 32px; background: var(--paper-3); border: var(--rule-hair) solid var(--line); cursor: ew-resize; touch-action: none; container-type: inline-size; --p: 0; }
 .ag-seg-bar { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding: 0 var(--space-xs); font-size: var(--text-xs); color: var(--ink-2); white-space: nowrap; overflow: hidden; border-right: var(--rule-hair) solid var(--line); background: color-mix(in oklab, var(--accent) var(--tint, 8%), transparent); pointer-events: none; }

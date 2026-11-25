@@ -8,7 +8,7 @@ const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1)
  * Scrubbable scan timeline. Segments and markers come from the progress and log events the stream
  * actually reported. Live: follows the scan. After a scan: replays at 4x and can be scrubbed.
  */
-export default function Timeline({ tl, playback, trackRef, scanning, liveSec, hasResult, error }) {
+export default function Timeline({ tl, playback, trackRef, scanning, liveSec, hasResult, error, liveHits }) {
   const scrubbing = useRef(false)
   const { t, playing, play, pause, seek } = playback
 
@@ -64,6 +64,11 @@ export default function Timeline({ tl, playback, trackRef, scanning, liveSec, ha
           {playing ? 'Pause replay' : t >= tl.total && canScrub ? 'Replay scan' : 'Resume replay'}
         </button>
         <span className="ag-clock ag-mono">{clock}</span>
+        {scanning && liveHits && (
+          <span className="ag-found ag-mono" title="Raw findings from the static tools that have finished. The final result is deduplicated and weighted, so it can be lower.">
+            {liveHits.total.toLocaleString()} found so far<small>preliminary</small>
+          </span>
+        )}
       </div>
       <div className="ag-tl-main">
         {note ? (

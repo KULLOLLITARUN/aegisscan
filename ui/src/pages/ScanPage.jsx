@@ -108,6 +108,7 @@ export default function ScanPage() {
           trackRef={trackRef}
           scanning={scanning}
           liveSec={liveSec}
+          liveHits={liveHits}
           hasResult={!!scanResult && !scanError}
           error={scanError}
         />

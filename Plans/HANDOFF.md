@@ -2,6 +2,67 @@
 
 _Updated 2026-11-25 after the real-repository round and two live LLM runs. Read this first, then `Plans/REMAINING_ISSUES_AND_TESTING.md` (the detailed issue list and fixed-items table) and `HOW_IT_WORKS.md`._
 
+## 0. WORK IN PROGRESS (2026-11-25): UI overhaul, uncommitted
+
+About 42 files are changed or new in the working tree and **not committed**. `main` on GitHub is `ca9f44b`: it holds only the two live-scan commits below (`35f3eef`, `ca9f44b`), built on `92ddb35` with just those lines staged from the shared files. Do not discard the rest. The user asked to stop and continue in a new session.
+
+**Built (all seven planned steps):**
+1. History page redesigned (trend chart in `ui/src/components/history/TrendChart.jsx`, clickable rows), a real **Cancel scan** (server: `ScanCancelled`, a BaseException raised from the progress callback once the SSE client is gone; stops at the next progress point), `recharts` removed, the legacy CSS alias layer and `index.css` classes removed.
+2. Colours: contrast measured from the OKLCH tokens (script was in the scratchpad: OKLCH to sRGB, WCAG ratio); four text tokens fixed (Day sev-high/medium/info, Night muted-2), all text now >= 4.5:1 in both themes. New `--status-*` score scale (`ui/src/lib/score.js`), categories as icon tags (`CategoryTag.jsx`, no colour: colour means severity), `prefers-contrast` and `forced-colors` support, the HTML report and `score_color` on the Night palette.
+3. Export (`POST /api/export?format=html|sarif|json`, `ExportMenu.jsx`), down-weighting badges parsed from the explanation prefixes (`ui/src/lib/notes.js`, `NoteBadges.jsx`), "hide down-weighted" and tool filters, toasts (`ToastContext.jsx`).
+4. Motion: score count-up (`ScoreNumber.jsx`), pin landing overshoot, View Transitions for pages and theme (`ui/src/lib/transition.js`), row stagger, canvas sway as a 14 s intro and no style writes when idle.
+5. Persistence: `scanner/storage/results.py` keeps the newest 30 local web results; `GET /api/last`, `GET /api/scan/<id>`, `has_result` in `/api/history`; restore on reload, open from History, new/fixed against the previous kept scan (`ui/src/lib/findingKey.js`, `useLocalState.js`).
+6. Triage: `scanner/storage/triage.py`, `GET/POST /api/triage`, "Mark false positive" / "Accept risk" / "Reopen" in the evidence view, "hide triaged" filters. UI-only: it does not change what the scanner reports (CI suppression is still `--save-baseline`).
+7. Tests: `tests/test_v33_ui_backend.py` (24), `ui/tests/lib.test.mjs` (9, Node's built-in runner with a small resolver hook, `npm test`), CI step "Test UI logic".
+
+**Found and fixed on the way:** SARIF export crashed on a relative target (hosted results use a label); `save_result` could fail a scan on an unexpected result shape (now fully guarded); four layout bugs seen in screenshots (location column breaking mid-number, "Secret scan" wrapping, oversized severity select, score chip hidden under reduced motion).
+
+**Verified:** ruff and mypy clean; UI build and oxlint clean (only the existing fast-refresh warnings on context files); the 24 + 9 new tests pass; `test_v13_coverage`, `test_v14_progress`, `test_v4_scoring_html`, `test_v6_ci_privacy` pass. Visual check in headless Edge (Day and Night: Scan, Findings, History) after a static scan of `examples/vulnerable_python`.
+
+**Still to do, in order:**
+1. Run the **full** suite once on this code (`python -m pytest -q -p no:cacheprovider > log`, not piped through `tail`, about 5 min). The last full run was stopped at 25% with everything passing so far; an earlier one reached about 90% before the `save_result` fix.
+2. If green, commit and push to `main` (the user's chosen workflow; no Claude attribution).
+3. Optional: animations were only seen as end states (headless screenshots under reduced motion); open the app in a real browser to see the motion. Not checked: very large results (Django), screen readers.
+
+**Screenshot recipe (no tools installed):** start `python main.py --server --port <free>`, POST a static scan to `/api/scan` (build the JSON in Python: shell quoting of Windows paths breaks), then `msedge.exe --headless=new --disable-gpu --user-data-dir=<temp> --window-size=1440,900 --blink-settings=preferredColorScheme=1|0 --force-prefers-reduced-motion --virtual-time-budget=20000 --screenshot=<file> http://127.0.0.1:<port>/dashboard`. Build output paths with `cygpath -w`, not `"$DIR\\$name"` (the backslash stops variable expansion). Without reduced motion the capture lands mid-animation; without `preferredColorScheme` headless Edge follows the system's dark mode.
+
+**File inventory (26 changed, 17 new; +762 / -623 in the changed files):**
+
+| Area | Changed | New |
+|---|---|---|
+| Server | `scanner/server/app.py` (cancel, export, kept results, triage, history `has_result`), `scanner/reporting/html_report.py` (Night palette), `scanner/reporting/sarif_report.py` (relative-target fix), `scanner/scoring/calculator.py` (`score_color` status scale) | `scanner/storage/results.py`, `scanner/storage/triage.py` |
+| Tests / CI | `tests/test_v4_scoring_html.py` (new colours), `.github/workflows/security-scan.yml` ("Test UI logic" step) | `tests/test_v33_ui_backend.py`, `ui/tests/{lib.test.mjs,register.mjs,resolve.mjs}` |
+| UI shell & state | `App.jsx` (ToastProvider), `CommandBar.jsx` (Cancel, Export, theme transition), `RailNav.jsx` (page transitions), `ScanContext.jsx` (cancelScan, local state) | `context/ToastContext.jsx`, `shell/ExportMenu.jsx`, `lib/useLocalState.js`, `lib/transition.js` |
+| UI pages & components | `ScansPage.jsx` (rewrite), `FindingsPage.jsx` (filters), `FindingTable.jsx`, `FindingsQueue.jsx`, `Evidence.jsx` (badges, flags, triage, toasts), `ScanCanvas.jsx` (sway intro, idle), `Verdict.jsx` (count-up, status chip, new/fixed) | `ScoreNumber.jsx`, `findings/{CategoryTag,FindingFlags,NoteBadges}.jsx`, `history/TrendChart.jsx` |
+| UI libs & styles | `constants.js` (TRIAGE_LABEL), `lib/api.js` (exportResult), `lib/paths.js` (normPath), `styles/tokens.css`, `styles/aegis.css`, `index.css` (legacy removed), `package.json` (test script, no recharts), `package-lock.json` | `lib/{score,notes,findingKey,time}.js` |
+
+**New API (local mode unless noted; all behind the existing Host/Origin gate and, in hosted mode, the token):**
+- `POST /api/export?format=html|sarif|json`: body is a ScanResult (validated with the model, at most 32 MB); returns an attachment. Works in hosted mode too.
+- `GET /api/last`, `GET /api/scan/<uuid>`: a kept result as JSON, or 404. Ids are checked against `^[0-9a-fA-F-]{8,64}$` before touching the disk.
+- `GET /api/triage?target=...`, `POST /api/triage {target, key, status: "false_positive"|"accepted"|null}`.
+- `GET /api/history`: rows now carry `has_result`.
+- Hosted mode: the kept-result and triage endpoints answer 404; nothing is stored.
+
+**Design decisions made in this round (keep unless the user says otherwise):**
+- Colour means severity and score status only; categories get icons. 14 category hues would collide with the severity hues and exceed the 8-hue limit for distinguishable series.
+- Status colours are marks next to a label, never text colour (they clear 3:1, not 4.5:1).
+- The finding key for new/fixed and triage is relative path + tool + issue type + category, with no line number, so an edit above a finding does not make it "new". Counting is per key (three identical findings, two left: one fixed).
+- Kept results: newest 30, stored next to the history database (`%LOCALAPPDATA%\AegisScan\results\`), never in a scanned folder. Triage: `%LOCALAPPDATA%\AegisScan\triage.json`.
+- Cancel stops at the next progress point; a long step such as Semgrep finishes first. The UI says so.
+- Motion respects reduced motion everywhere (CSS animations and delays to 0, no View Transitions, score shown at once, no replay autoplay, no sway).
+- UI tests use Node's built-in runner, so nothing was installed; a browser test (Playwright) would be an install and needs the user's OK.
+
+**Known limits left:** long Semgrep messages used as issue titles wrap to two or three lines (content, not layout); Files page still lists only files with findings; the screenshots show end states only.
+
+**Live scan view (2026-11-25, committed and pushed as `35f3eef` and `ca9f44b`).** While a scan runs the canvas draws the real file list and fills in findings as each static tool finishes.
+- New optional callbacks on `main.run`: `on_files(list[{"path", "lines"}])`, called once after classification with the analysable files (path relative to the target, posix); `on_findings(tool, list[{"path", "worst", "count"}])`, called after each static tool with that tool's raw findings grouped by file. `run_all_tools` takes `on_findings(tool, list[Finding])` and calls it only for tools that found something. Callers that pass neither behave as before, so the existing tests that stub `run_all_tools` still work. Callback errors are swallowed.
+- New SSE events on `/api/scan/stream`, local and hosted: `files` = `{files: [{path, lines}], total}` (at most 5000 files, `total` is the true count) and `preview` = `{tool, files: [{path, worst, count}]}`. Paths are relative, so nothing needs scrubbing in hosted mode. The final `complete` event is unchanged.
+- **Preview counts are preliminary:** they are raw tool output before deduplication, context weighting and suppression, so the final result can be lower (a `scanner` run showed 29 live and 25 final). The UI labels them "preliminary" everywhere.
+- UI: `ScanContext` keeps `liveFiles` and `liveHits` (reset per scan; `lib/liveHits.js` `mergePreview` adds counts per file and keeps the worst severity); `lib/scene.js` `buildLiveScene` lays out one small tile per file sorted by path, sampled to 240 tiles with `hiddenFiles` counting the rest; `ScanCanvas` shows them during a scan (tile tinted with its worst severity plus one ring when a preview finding arrives; the old result's notes are hidden while live); `Timeline` shows "N found so far, preliminary" under the clock.
+- **Honest limits:** the scanner reports progress per tool, not per file, so which tile lights when the sweep passes is illustrative (the canvas says so). A preview finding in a file that is not drawn (over 240 files) counts in the total but has no tile. The design preview with the belt, gate and falling blocks is `Plans/live-scan-preview.html`; it was not built into the real UI because there are no per-file events to drive it.
+- Tests: `tests/test_v14_progress.py` (4 new), `ui/tests/lib.test.mjs` (4 new, in the still-uncommitted tests folder). The full Python suite last ran 960 passed, 3 skipped, 1 failed: `test_v31_real_repo_noise.py::test_mongo_where_rule` timed out in a Semgrep subprocess on this machine (cause not investigated).
+- Possible next steps: pick up preview findings for files that are not drawn; per-tool gate label; a real per-file event stream would need the static tools to report per file.
+
 ## 1. Snapshot
 
 **What it is:** a hybrid security + optimization scanner. Bandit, Semgrep, Gitleaks, OSV-Scanner and a built-in optimizer run first; a Groq LLM pass reasons over the code and the static findings; results go to CLI, HTML, JSON and SARIF, a React web UI (`ui/`), and a CI gate (`--fail-on security:high`).

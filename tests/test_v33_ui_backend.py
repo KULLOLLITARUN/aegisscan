@@ -223,12 +223,61 @@ def test_a_cancelled_stream_is_logged_not_reported_as_an_error(monkeypatch, tmp_
     assert "error" not in fake.events and "complete" not in fake.events
 
 
+def test_a_queued_stream_tells_the_browser_it_is_waiting_then_runs(monkeypatch, tmp_path) -> None:
+    import threading
+    import main
+    from scanner.server import app as server_app
+    monkeypatch.setattr(main, "run", lambda **_k: (_ for _ in ()).throw(RuntimeError("ran")))
+    h = _handler("POST", "/api/scan/stream")
+    fake = _FakeSse()
+    h._open_sse = lambda: fake
+    settings = {"static_only": True, "deep": False, "generate_patches": False, "privacy": "standard"}
+    server_app._LOCAL_SCAN_LOCK.acquire()  # another scan is running
+    worker = threading.Thread(target=h._local_stream, args=(tmp_path, settings))
+    worker.start()
+    try:
+        for _ in range(100):
+            if fake.data:
+                break
+            threading.Event().wait(0.05)
+        assert fake.data and fake.data[0][0] == "progress"
+        assert "Waiting for the previous scan" in fake.data[0][1]["phase"]
+    finally:
+        server_app._LOCAL_SCAN_LOCK.release()
+        worker.join(5)
+    assert not worker.is_alive()
+    assert "error" in fake.events  # it went on to run once the lock was free
+    assert server_app._LOCAL_SCAN_LOCK.acquire(blocking=False)  # and released it again
+    server_app._LOCAL_SCAN_LOCK.release()
+
+
+def test_a_stream_cancelled_while_waiting_never_starts(monkeypatch, tmp_path) -> None:
+    from scanner.server import app as server_app
+    h = _handler("POST", "/api/scan/stream")
+    fake = _FakeSse()
+    fake.gone = lambda: True
+    h._open_sse = lambda: fake
+    called = []
+    import main
+    monkeypatch.setattr(main, "run", lambda **_k: called.append(1))
+    server_app._LOCAL_SCAN_LOCK.acquire()
+    try:
+        h._local_stream(tmp_path, {"static_only": True, "deep": False, "generate_patches": False, "privacy": "standard"})
+    finally:
+        server_app._LOCAL_SCAN_LOCK.release()
+    assert not called
+    assert server_app._LOCAL_SCAN_LOCK.acquire(blocking=False)
+    server_app._LOCAL_SCAN_LOCK.release()
+
+
 class _FakeSse:
     def __init__(self) -> None:
         self.events: list[str] = []
+        self.data: list[tuple[str, dict]] = []
 
     def __call__(self, event, data) -> None:
         self.events.append(event)
+        self.data.append((event, data))
 
     def gone(self) -> bool:
         return False

@@ -581,16 +581,31 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
         # One local scan at a time, as when the server handled a single request at a time: a scan sets
         # the process-wide API key and log forwarding, so overlapping scans would mix them. Other
         # requests (triage, history, results) are not held up by this lock.
+        if stream:
+            self._local_stream(target_path, p)  # takes the lock itself so it can tell the browser it is waiting
+            return
         with _LOCAL_SCAN_LOCK:
             if p["api_key"]:
                 os.environ["GROQ_API_KEY"] = p["api_key"]
-            if stream:
-                self._local_stream(target_path, p)
-            else:
-                self._local_sync(target_path, p)
+            self._local_sync(target_path, p)
+
+    def _wait_for_scan_slot(self, sse) -> None:
+        """Take the local scan lock, telling the browser while another scan still holds it.
+
+        Raises ScanCancelled if the browser goes away while waiting, so a cancelled scan never starts.
+        """
+        if _LOCAL_SCAN_LOCK.acquire(blocking=False):
+            return
+        message = "Waiting for the previous scan to finish"
+        sse("progress", {"phase": message, "file": "", "pct": 0, "found": 0})
+        sse("log", {"ts": time.strftime("%H:%M:%S"), "level": "info", "logger": "aegisscan.server", "message": message + "."})
+        while not _LOCAL_SCAN_LOCK.acquire(timeout=1):
+            if sse.gone():
+                raise ScanCancelled()
 
     def _local_stream(self, target_path: Path, p: dict) -> None:
         sse = self._open_sse()
+        holding = False
         try:
             # Validate path before calling run() — run() uses sys.exit() on bad paths
             if not target_path.exists():
@@ -599,6 +614,11 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             if not target_path.is_dir():
                 sse("error", {"error": f"Path is not a directory: {target_path}"})
                 return
+
+            self._wait_for_scan_slot(sse)
+            holding = True
+            if p.get("api_key"):
+                os.environ["GROQ_API_KEY"] = p["api_key"]
 
             from main import run
 
@@ -646,6 +666,8 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             log.error("SSE scan error: %s\n%s", exc, traceback.format_exc())
             sse("error", {"error": str(exc)})
         finally:
+            if holding:
+                _LOCAL_SCAN_LOCK.release()
             sse.close()
 
     def _local_sync(self, target_path: Path, p: dict) -> None:

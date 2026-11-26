@@ -59,6 +59,24 @@ def run_all_tools(
         if progress:
             progress(name)
 
+    config = load_config(target)
+    root = target.resolve()
+
+    def _keep(found: list[Finding] | None) -> list[Finding]:
+        """Drop findings in files matched by .aegisscan.toml exclude_files."""
+        found = list(found or [])
+        if not config.exclude_files:
+            return found
+        out = []
+        for f in found:
+            try:
+                rel = f.file_path.resolve().relative_to(root).as_posix()
+            except (ValueError, OSError):
+                rel = f.file_path.name
+            if not config.is_file_excluded(rel):
+                out.append(f)
+        return out
+
     def _done(name: str, found: list[Finding]) -> None:
         if on_findings and found:
             try:
@@ -67,7 +85,6 @@ def run_all_tools(
                 log.debug("on_findings callback failed", exc_info=True)
 
     # --- Bandit (Python SAST, always available via pip) ---
-    config = load_config(target)
     # .aegisscan.toml's exclude_dirs applies to every tool, in full and scoped scans alike.
     files: list[Path] | None = None
     if only_files is not None:
@@ -78,7 +95,7 @@ def run_all_tools(
             return [], []
 
     _step("Bandit")
-    bandit_findings = run_bandit(target, config.exclude_dirs, files)
+    bandit_findings = _keep(run_bandit(target, config.exclude_dirs, files))
     _done("Bandit", bandit_findings)
     if bandit_findings:
         all_findings.extend(bandit_findings)
@@ -88,7 +105,7 @@ def run_all_tools(
 
     # --- Semgrep (optional CLI) ---
     _step("Semgrep")
-    semgrep_findings = run_semgrep(target, files, config.exclude_dirs)
+    semgrep_findings = _keep(run_semgrep(target, files, config.exclude_dirs))
     _done("Semgrep", semgrep_findings)
     if semgrep_findings:
         all_findings.extend(semgrep_findings)
@@ -98,7 +115,7 @@ def run_all_tools(
 
     # --- Gitleaks (optional CLI) ---
     _step("Gitleaks")
-    gitleaks_findings = run_gitleaks(target, files, config.exclude_dirs)
+    gitleaks_findings = _keep(run_gitleaks(target, files, config.exclude_dirs))
     _done("Gitleaks", gitleaks_findings)
     if gitleaks_findings:
         all_findings.extend(gitleaks_findings)
@@ -112,7 +129,7 @@ def run_all_tools(
         log.info("OSV-Scanner skipped: --privacy strict forbids sending package names to api.osv.dev")
     else:
         _step("OSV-Scanner")
-        osv_findings = run_osv(target, files, config.exclude_dirs)
+        osv_findings = _keep(run_osv(target, files, config.exclude_dirs))
         _done("OSV-Scanner", osv_findings)
         if osv_findings:
             all_findings.extend(osv_findings)
@@ -120,7 +137,7 @@ def run_all_tools(
 
     # --- Optimizer (pure-Python AST checks, always available) ---
     _step("Optimizer")
-    opt_findings = run_optimizer(target, set(config.exclude_dirs), files)
+    opt_findings = _keep(run_optimizer(target, set(config.exclude_dirs), files))
     _done("Optimizer", opt_findings)
     if opt_findings:
         all_findings.extend(opt_findings)

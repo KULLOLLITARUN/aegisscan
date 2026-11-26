@@ -34,6 +34,7 @@ load_dotenv()
 
 from scanner.chunking.dispatcher import chunk_file
 from scanner.ci.ci_gate import evaluate_ci_gate
+from scanner.config import load_config
 from scanner.ingestion.classifier import FileClassifier
 from scanner.ingestion.crawler import WorkspaceCrawler
 from scanner.ingestion.git_diff import get_changed_files
@@ -362,6 +363,19 @@ def run(
     changed: set[Path] | None = get_changed_files(path, changed_since) if (changed_only or changed_since) else None
     if changed is not None:
         discovered_files = [f for f in discovered_files if f.resolve() in changed]
+
+    # .aegisscan.toml exclude_files: these files are not classified, chunked, sent to the LLM or shown.
+    file_cfg = load_config(path)
+    if file_cfg.exclude_files:
+        root_dir = path.resolve()
+
+        def _rel(f: Path) -> str:
+            try:
+                return f.resolve().relative_to(root_dir).as_posix()
+            except ValueError:
+                return f.name
+
+        discovered_files = [f for f in discovered_files if not file_cfg.is_file_excluded(_rel(f))]
 
     # ---- 2. Classify ----
     classifier = FileClassifier()

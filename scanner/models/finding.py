@@ -66,5 +66,10 @@ class Finding(BaseModel):
     provider: Optional[str] = None   # "groq" (V2+; Groq only per project constraint)
     model: Optional[str] = None      # e.g. "llama-3.3-70b" (V2+)
 
+    # Other sources that independently flagged this same spot. The deduplicator keeps one finding per
+    # cluster and records here who else agreed, so the correlator can tell real agreement apart from
+    # two unrelated findings that merely sit near each other.
+    corroborated_by: list[str] = Field(default_factory=list)
+
     # History tracking (V10+)
     first_seen_scan_id: Optional[str] = None  # scan_id of the first run that surfaced this finding

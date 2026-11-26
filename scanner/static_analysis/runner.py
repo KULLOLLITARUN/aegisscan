@@ -21,6 +21,7 @@ from scanner.static_analysis.bandit_runner import run_bandit
 from scanner.static_analysis.gitleaks_runner import run_gitleaks
 from scanner.static_analysis.optimization_runner import run_optimizer
 from scanner.static_analysis.osv_runner import run_osv
+from scanner.static_analysis import status
 from scanner.static_analysis.scope import within
 from scanner.static_analysis.semgrep_runner import run_semgrep
 
@@ -47,11 +48,27 @@ def run_all_tools(
     finished, before the next one starts, so a live UI can show results as they arrive. Exceptions it
     raises are swallowed.
 
+    A tool that did not run or ran incompletely (not installed, timed out, unreadable report) is
+    recorded through ``status.problem`` and left out of ``tools_run``, so it is not mistaken for a
+    clean result. Open ``status.collect()`` around this call to read the reasons.
+
     Returns:
         findings    : Combined list[Finding] from all tools that ran.
-        tools_run   : Names of tools that actually produced output
+        tools_run   : Names of tools that ran to completion, with or without findings
                       (for ScanResult.static_tools_run).
     """
+    with status.collect() as issues:
+        return _run_all_tools(target, progress, only_files, privacy, on_findings, issues)
+
+
+def _run_all_tools(
+    target: Path,
+    progress: Callable[[str], None] | None,
+    only_files: Iterable[Path] | None,
+    privacy: str,
+    on_findings: Callable[[str, list[Finding]], None] | None,
+    issues: dict[str, str],
+) -> tuple[list[Finding], list[str]]:
     all_findings: list[Finding] = []
     tools_run: list[str] = []
 
@@ -97,31 +114,25 @@ def run_all_tools(
     _step("Bandit")
     bandit_findings = _keep(run_bandit(target, config.exclude_dirs, files))
     _done("Bandit", bandit_findings)
-    if bandit_findings:
-        all_findings.extend(bandit_findings)
+    all_findings.extend(bandit_findings)
+    if "bandit" not in issues:
         tools_run.append("bandit")
-    else:
-        log.debug("Bandit: no findings or not available")
 
     # --- Semgrep (optional CLI) ---
     _step("Semgrep")
     semgrep_findings = _keep(run_semgrep(target, files, config.exclude_dirs))
     _done("Semgrep", semgrep_findings)
-    if semgrep_findings:
-        all_findings.extend(semgrep_findings)
+    all_findings.extend(semgrep_findings)
+    if "semgrep" not in issues:
         tools_run.append("semgrep")
-    else:
-        log.debug("Semgrep: no findings or not available")
 
     # --- Gitleaks (optional CLI) ---
     _step("Gitleaks")
     gitleaks_findings = _keep(run_gitleaks(target, files, config.exclude_dirs))
     _done("Gitleaks", gitleaks_findings)
-    if gitleaks_findings:
-        all_findings.extend(gitleaks_findings)
+    all_findings.extend(gitleaks_findings)
+    if "gitleaks" not in issues:
         tools_run.append("gitleaks")
-    else:
-        log.debug("Gitleaks: no findings or not available")
 
     # --- OSV-Scanner (optional CLI; dependency CVEs). It sends package names and versions to
     # api.osv.dev, so --privacy strict switches it off. ---
@@ -131,18 +142,19 @@ def run_all_tools(
         _step("OSV-Scanner")
         osv_findings = _keep(run_osv(target, files, config.exclude_dirs))
         _done("OSV-Scanner", osv_findings)
-        if osv_findings:
-            all_findings.extend(osv_findings)
+        all_findings.extend(osv_findings)
+        if "osv-scanner" not in issues:
             tools_run.append("osv-scanner")
 
     # --- Optimizer (pure-Python AST checks, always available) ---
     _step("Optimizer")
     opt_findings = _keep(run_optimizer(target, set(config.exclude_dirs), files))
     _done("Optimizer", opt_findings)
-    if opt_findings:
-        all_findings.extend(opt_findings)
-        tools_run.append("aegis-optimizer")
+    all_findings.extend(opt_findings)
+    tools_run.append("aegis-optimizer")
 
+    for tool, reason in issues.items():
+        log.warning("Static analysis: %s %s", tool, reason)
     log.info(
         "Static analysis complete: %d findings from %d tool(s): %s",
         len(all_findings),

@@ -137,6 +137,10 @@ export default function ScanCanvas({
   if (scene.hiddenPins > 0) notes.push(`Showing the ${pins.length} most severe of ${scene.totalFindings} findings. +${scene.hiddenPins} more are in the queue.`)
   if (scene.cleanFiles > 0) notes.push(`+${scene.cleanFiles} analysed ${scene.cleanFiles === 1 ? 'file has' : 'files have'} no findings and ${scene.cleanFiles === 1 ? 'is' : 'are'} not drawn.`)
 
+  // A tool that did not run (or ran partly) leaves findings out, so an empty result is not proof of a clean scan.
+  const toolIssues = Object.entries(result?.static_tool_issues ?? {})
+  for (const [tool, reason] of toolIssues) notes.push(`Incomplete scan: ${tool} ${reason}. Its findings are missing.`)
+
   const stageState = error ? 'error' : loading ? 'loading' : noScan ? 'empty' : 'full'
 
   return (
@@ -243,7 +247,7 @@ export default function ScanCanvas({
           <div>{`Found so far (preliminary, before deduplication): ${liveHits.total.toLocaleString()} in ${Object.keys(liveHits.byPath).length.toLocaleString()} ${Object.keys(liveHits.byPath).length === 1 ? 'file' : 'files'}, last from ${liveHits.tool}.`}</div>
         )}
         {!live && notes.map((n) => <div key={n}>{n}</div>)}
-        {result && !loading && !error && scene.totalFindings === 0 && (
+        {result && !loading && !error && scene.totalFindings === 0 && toolIssues.length === 0 && (
           <div>The floor is clear: {files} {files === 1 ? 'file' : 'files'} analysed, no findings.</div>
         )}
       </div>

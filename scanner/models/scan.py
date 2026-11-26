@@ -39,7 +39,9 @@ class ScanResult(BaseModel):
 
     # ---- Timing & tooling (populated by orchestration in main.py) ----
     scan_duration_seconds: float = 0.0
-    static_tools_run: list[str] = Field(default_factory=list)  # V1+
+    static_tools_run: list[str] = Field(default_factory=list)  # V1+: tools that ran to completion
+    # Tools that did not run or ran incompletely, with the reason (a failed tool must not look like a clean scan)
+    static_tool_issues: dict[str, str] = Field(default_factory=dict)
     llm_provider: Optional[str] = None    # V2+: provider name e.g. 'groq'
     llm_model: Optional[str] = None       # V2+: model name used for LLM pass
     llm_chunks_analyzed: int = 0          # V2+: chunks sent to LLM auditor

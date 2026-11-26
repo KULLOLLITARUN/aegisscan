@@ -19,6 +19,7 @@ import subprocess
 from pathlib import Path
 
 from scanner.models.finding import Finding, Severity
+from scanner.static_analysis import status
 from scanner.static_analysis.gitleaks_runner import _find_tool, _is_excluded
 
 log = logging.getLogger(__name__)
@@ -122,19 +123,26 @@ def _run(osv_bin: str, args: list[str], target: Path) -> list[Finding] | None:
     try:
         # Exit code 1 means "vulnerabilities found", 128 "nothing to scan": both carry JSON/empty.
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=_TIMEOUT)
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+    except subprocess.TimeoutExpired:
+        log.warning("OSV-Scanner stopped after %s s", _TIMEOUT)
+        status.problem("osv-scanner", f"timed out after {_TIMEOUT} s")
+        return None
+    except (FileNotFoundError, OSError) as exc:
         log.warning("OSV-Scanner subprocess failed: %s", exc)
+        status.problem("osv-scanner", f"could not be started ({exc})")
         return None
     text = proc.stdout.strip()
     if not text:
         if proc.returncode not in (0, 128):
             log.warning("OSV-Scanner exited %s: %s", proc.returncode, proc.stderr.strip()[:300])
+            status.problem("osv-scanner", f"exited with code {proc.returncode} and no report")
             return None
         return []
     try:
         return parse_report(json.loads(text), target)
     except json.JSONDecodeError as exc:
         log.warning("OSV-Scanner output is not valid JSON: %s", exc)
+        status.problem("osv-scanner", "produced an unreadable report")
         return None
 
 
@@ -150,6 +158,7 @@ def run_osv(
     osv_bin = _find_tool("osv-scanner")
     if osv_bin is None:
         log.info("osv-scanner binary absent — dependency scan skipped")
+        status.problem("osv-scanner", "not installed, so dependencies were not checked for known vulnerabilities")
         return []
 
     if files is None:

@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from scanner.models.finding import Finding, Severity
+from scanner.static_analysis import status
 from scanner.static_analysis.scope import batches
 
 log = logging.getLogger(__name__)
@@ -89,6 +90,7 @@ def run_bandit(
     bandit_cmd = _find_bandit()
     if bandit_cmd is None:
         log.warning("Bandit not found on PATH or in venv — skipping")
+        status.problem("bandit", "not installed")
         return []
 
     base = [bandit_cmd, "-f", "json", "-q", "--exit-zero",
@@ -126,18 +128,26 @@ def _run_once(cmd: list[str], target: Path) -> list[Finding]:
             text=True,
             timeout=120,
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+    except subprocess.TimeoutExpired:
+        log.warning("Bandit stopped after 120 s")
+        status.problem("bandit", "timed out after 120 s")
+        return []
+    except (FileNotFoundError, OSError) as exc:
         log.warning("Bandit subprocess failed: %s", exc)
+        status.problem("bandit", f"could not be started ({exc})")
         return []
 
     if not proc.stdout.strip():
-        log.debug("Bandit produced no output")
+        # With -f json and --exit-zero Bandit always prints a report, even an empty one.
+        log.warning("Bandit produced no output: %s", proc.stderr.strip()[:200])
+        status.problem("bandit", "produced no report")
         return []
 
     try:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         log.warning("Bandit output is not valid JSON: %s", exc)
+        status.problem("bandit", "produced an unreadable report")
         return []
 
     findings: list[Finding] = []

@@ -184,6 +184,12 @@ def generate_html(result: ScanResult, output_path: Path) -> None:
     llm_count    = sum(1 for f in result.findings if f.rule_source == "llm")
 
     tools_str = ", ".join(result.static_tools_run) or "none"
+    issues_html = "".join(
+        f'<div style="margin-bottom:6px;color:#f28e42"><strong>Incomplete:</strong> '
+        f'{html.escape(tool)} {html.escape(reason)}. Findings from it are missing, so a clean result '
+        f'here does not mean clean.</div>'
+        for tool, reason in result.static_tool_issues.items()
+    )
     llm_str   = f"{result.llm_model or 'n/a'} via {result.llm_provider}" if result.llm_provider else "not configured"
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -448,6 +454,7 @@ def generate_html(result: ScanResult, output_path: Path) -> None:
   <div class="gauge-card" style="flex:1;min-width:280px;text-align:left;padding:20px">
     <div class="label" style="color:var(--muted);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">Toolchain</div>
     <div style="margin-bottom:6px"><span style="color:var(--muted)">Static:</span> {html.escape(tools_str)}</div>
+    {issues_html}
     <div style="margin-bottom:6px"><span style="color:var(--muted)">LLM:</span> {html.escape(llm_str)}</div>
     <div><span style="color:var(--muted)">Chunks:</span> {result.chunks_created} ({result.llm_chunks_analyzed} sent to LLM)</div>
   </div>

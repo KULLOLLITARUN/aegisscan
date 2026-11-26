@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 from scanner.models.finding import Finding, Severity
+from scanner.static_analysis import status
 
 log = logging.getLogger(__name__)
 
@@ -207,8 +208,13 @@ def _run_gitleaks_binary(gitleaks_bin: str, target: Path) -> list[Finding] | Non
             text=True,
             timeout=120,
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+    except subprocess.TimeoutExpired:
+        log.warning("Gitleaks stopped after 120 s")
+        status.problem("gitleaks", "binary timed out after 120 s; only the built-in secret scanner covered this scan")
+        return None
+    except (FileNotFoundError, OSError) as exc:
         log.warning("Gitleaks subprocess failed: %s", exc)
+        status.problem("gitleaks", f"binary could not be started ({exc}); only the built-in secret scanner covered this scan")
         return None
 
     try:
@@ -216,6 +222,7 @@ def _run_gitleaks_binary(gitleaks_bin: str, target: Path) -> list[Finding] | Non
         report_path.unlink(missing_ok=True)
     except OSError as exc:
         log.warning("Cannot read Gitleaks report: %s", exc)
+        status.problem("gitleaks", "binary produced no readable report; only the built-in secret scanner covered this scan")
         return None
 
     if not text.strip() or text.strip() == "null":
@@ -225,7 +232,8 @@ def _run_gitleaks_binary(gitleaks_bin: str, target: Path) -> list[Finding] | Non
         items = json.loads(text)
     except json.JSONDecodeError as exc:
         log.warning("Gitleaks output is not valid JSON: %s", exc)
-        return []
+        status.problem("gitleaks", "binary produced an unreadable report; only the built-in secret scanner covered this scan")
+        return None
 
     if not isinstance(items, list):
         return []

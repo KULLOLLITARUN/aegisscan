@@ -260,7 +260,12 @@ def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
             kept.append(cluster[0])
             continue
 
-        kept.append(_pick_best(cluster))
+        best = _pick_best(cluster)
+        # The cluster merged findings from several tools: remember who agreed with the one we keep.
+        others = sorted({m.rule_source for m in cluster if m.rule_source != best.rule_source})
+        if others:
+            best = best.model_copy(update={"corroborated_by": sorted({*best.corroborated_by, *others})})
+        kept.append(best)
 
     n_suppressed = total - len(kept)
     if n_suppressed:

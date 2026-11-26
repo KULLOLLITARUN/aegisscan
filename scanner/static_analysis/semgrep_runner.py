@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 from scanner.models.finding import Finding, Severity
+from scanner.static_analysis import status
 from scanner.static_analysis.scope import batches
 
 log = logging.getLogger(__name__)
@@ -129,6 +130,7 @@ def run_semgrep(
     semgrep_bin = _find_tool("semgrep")
     if semgrep_bin is None:
         log.warning("semgrep not found on PATH or venv — skipping")
+        status.problem("semgrep", "not installed")
         return []
 
     config_flags = []
@@ -170,27 +172,34 @@ def _run_semgrep_once(cmd: list[str]) -> list[Finding]:
         proc = _run_bounded(cmd, timeout_s)
     except subprocess.TimeoutExpired:
         log.warning("Semgrep stopped after %d s; continuing with the other tools' results", timeout_s)
+        status.problem("semgrep", f"timed out after {timeout_s} s")
         return []
     except (FileNotFoundError, OSError) as exc:
         log.warning("Semgrep subprocess failed: %s", exc)
+        status.problem("semgrep", f"could not be started ({exc})")
         return []
 
     output = proc.stdout.strip()
     if not output:
-        log.debug("Semgrep produced no output")
+        # With --json Semgrep always prints a document, even with no results.
+        log.warning("Semgrep produced no output (exit %d): %s", proc.returncode, proc.stderr.strip()[:200])
+        status.problem("semgrep", f"produced no report (exit {proc.returncode})")
         return []
 
     try:
         data = json.loads(output)
     except json.JSONDecodeError as exc:
         log.warning("Semgrep output is not valid JSON: %s", exc)
+        status.problem("semgrep", "produced an unreadable report")
         return []
 
     # A single invalid config (e.g. a renamed registry pack -> HTTP 404) makes Semgrep
     # exit 7 with zero results, which used to look identical to "nothing found".
     for err in data.get("errors", []):
         if err.get("level") == "error":
-            log.warning("Semgrep error (exit %d): %s", proc.returncode, str(err.get("message", ""))[:200])
+            message = str(err.get("message", ""))[:200]
+            log.warning("Semgrep error (exit %d): %s", proc.returncode, message)
+            status.problem("semgrep", f"reported an error, results may be incomplete: {message}")
 
     findings: list[Finding] = []
     seen: set[tuple] = set()

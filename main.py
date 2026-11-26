@@ -57,6 +57,7 @@ from scanner.providers.manager import ProviderManager
 from scanner.reporting.html_report import generate_html
 from scanner.scoring.calculator import optimization_score, score_label, security_score
 from scanner.static_analysis.runner import run_all_tools
+from scanner.static_analysis.status import collect as collect_tool_issues
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -183,6 +184,8 @@ def _print_report(
     print(f"  Time     : {result.scan_timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print(f"  Duration : {result.scan_duration_seconds:.2f}s")
     print(f"  Static   : {', '.join(result.static_tools_run) or 'none'}")
+    for tool, reason in result.static_tool_issues.items():
+        print(f"  WARNING  : {tool} {reason}. Its findings are missing; a clean result is not proof of a clean scan.")
     print(f"  LLM      : {llm_status}")
     if result.llm_chunks_analyzed:
         print(f"  LLM chunks: {result.llm_chunks_analyzed} analyzed")
@@ -423,15 +426,17 @@ def run(
         def _live(tool: str, found: list[Finding]) -> None:
             on_findings(tool, _by_file(found, path.resolve()))
         tool_kwargs["on_findings"] = _live
-    static_findings, tools_run = run_all_tools(
-        path.resolve(),
-        progress=lambda tool: _progress("Static analysis", 30, tool),
-        # --changed-only: the tools read just the changed files (discovered_files was already cut
-        # down to them above) instead of the whole tree. None = scan everything.
-        only_files=discovered_files if changed is not None else None,
-        privacy=privacy,
-        **tool_kwargs,
-    )
+    with collect_tool_issues() as tool_issues:
+        static_findings, tools_run = run_all_tools(
+            path.resolve(),
+            progress=lambda tool: _progress("Static analysis", 30, tool),
+            # --changed-only: the tools read just the changed files (discovered_files was already cut
+            # down to them above) instead of the whole tree. None = scan everything.
+            only_files=discovered_files if changed is not None else None,
+            privacy=privacy,
+            **tool_kwargs,
+        )
+    tool_issues = dict(tool_issues)
     if changed is not None:
         # Safety net: a tool must never blame a change for issues in files that did not change,
         # otherwise a CI gate would fail on every pre-existing issue in the repo.
@@ -510,6 +515,7 @@ def run(
         language_breakdown=dict(lang_counter),
         scan_duration_seconds=round(duration, 3),
         static_tools_run=tools_run,
+        static_tool_issues=tool_issues,
         llm_provider=llm_provider,
         llm_model=llm_model,
         llm_chunks_analyzed=llm_chunks_analyzed,

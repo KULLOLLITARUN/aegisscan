@@ -1,8 +1,8 @@
 """Triage decisions made in the web UI: a finding marked a false positive or an accepted risk.
 
 Stored per scan target in one JSON file in AegisScan's own data folder (local mode only). A finding
-is identified by a key the UI derives from its relative path, rule source, issue type and category
-(not its line, so a decision survives edits above it). Decisions do not change what the scanner
+is identified by a key the UI derives from its relative path, rule source, issue type, category and a
+fingerprint of the flagged code (not its line number, so a decision survives edits above it). Decisions do not change what the scanner
 reports; the UI uses them to label and hide findings. For CI suppression use --save-baseline.
 """
 from __future__ import annotations

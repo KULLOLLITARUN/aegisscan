@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { authHeaders, toApiError } from './api'
-import { diffResults, findingKey } from './findingKey'
+import { diffResults, triageKey } from './findingKey'
 import { parseTs } from './time'
 import { normPath } from './paths'
 
@@ -13,7 +13,7 @@ const sameTarget = (a, b) => normPath(a).toLowerCase() === normPath(b).toLowerCa
  */
 export function useLocalState({ enabled, token, scanResult, setScanResult, scanning, history, log }) {
   const [diff, setDiff] = useState(null) // { prevId, newIds: Set, fixed: [] }
-  const [triage, setTriageMap] = useState({}) // { findingKey: 'false_positive' | 'accepted' }
+  const [triage, setTriageMap] = useState({}) // { triageKey: 'false_positive' | 'accepted' }
   const restored = useRef(false)
 
   // Restore the last kept result once, if the page opened without one.
@@ -71,7 +71,7 @@ export function useLocalState({ enabled, token, scanResult, setScanResult, scann
   }, [enabled, target, token])
 
   const setTriage = useCallback(async (finding, status) => {
-    const key = findingKey(finding, target)
+    const key = triageKey(finding, target)
     const send = () => fetch('/api/triage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
@@ -94,7 +94,7 @@ export function useLocalState({ enabled, token, scanResult, setScanResult, scann
     setTriageMap(await res.json())
   }, [target, token])
 
-  const triageOf = useCallback((f) => (enabled && target ? triage[findingKey(f, target)] ?? null : null), [enabled, target, triage])
+  const triageOf = useCallback((f) => (enabled && target ? triage[triageKey(f, target)] ?? null : null), [enabled, target, triage])
 
   return useMemo(
     () => ({ openScan, diff, triageOf, setTriage, canKeep: enabled }),

@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { parseNotes, isDownweighted } from '../src/lib/notes.js'
-import { findingKey, diffResults } from '../src/lib/findingKey.js'
+import { findingKey, triageKey, diffResults } from '../src/lib/findingKey.js'
 import { scoreStatus, formatScore } from '../src/lib/score.js'
 import { parseTs } from '../src/lib/time.js'
 import { normPath, relPath } from '../src/lib/paths.js'
@@ -36,6 +36,21 @@ test('findingKey ignores the line number and the target prefix', () => {
   const b = findingKey(f({ line_start: 90, file_path: 'C:/proj/src/app.py' }), 'C:/proj/')
   assert.equal(a, b)
   assert.equal(a, 'src/app.py|bandit|Hashlib|crypto')
+})
+
+test('triageKey tells identical issues in one file apart, and survives the code moving', () => {
+  const a = f({ issue_type: 'Try Except Pass', evidence: 'try:\n    x()\nexcept:\n    pass', line_start: 10 })
+  const b = f({ issue_type: 'Try Except Pass', evidence: 'try:\n    y()\nexcept:\n    pass', line_start: 40 })
+  assert.notEqual(triageKey(a, 'C:/proj'), triageKey(b, 'C:/proj'))
+  // same code moved down the file, with bandit-style line-number prefixes and different spacing
+  const moved = { ...a, line_start: 55, evidence: '55 try:\n56     x()\n57 except:\n58     pass' }
+  assert.equal(triageKey(a, 'C:/proj'), triageKey(moved, 'C:/proj'))
+  assert.ok(triageKey(a, 'C:/proj').startsWith(findingKey(a, 'C:/proj') + '|'))
+  assert.ok(triageKey(a, 'C:/proj').length < 600)
+})
+
+test('triageKey falls back to the line number when there is no snippet', () => {
+  assert.equal(triageKey(f({ line_start: 7 }), 'C:/proj'), 'src/app.py|bandit|Hashlib|crypto|line7')
 })
 
 test('diffResults is count-aware: one of three identical findings fixed', () => {

@@ -110,7 +110,8 @@ def test_mongo_where_rule(tmp_path: Path) -> None:
         encoding="utf8",
     )
     proc = subprocess.run(
-        [_SEMGREP, "--config", str(_JS_RULES), "--json", "--quiet", "--metrics=off", str(src)],
+        [_SEMGREP, "--config", str(_JS_RULES), "--json", "--quiet", "--metrics=off",
+         "--project-root", str(tmp_path), str(src)],  # as the runner does; else Semgrep walks the profile folder
         capture_output=True, text=True, timeout=300,
     )
     hits = {r["start"]["line"] for r in json.loads(proc.stdout)["results"]

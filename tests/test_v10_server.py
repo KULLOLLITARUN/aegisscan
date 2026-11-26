@@ -108,6 +108,7 @@ def test_run_server_prints_build_hint_when_ui_missing(tmp_path: Path, monkeypatc
             pass
 
     monkeypatch.setattr(app, "_ExclusiveHTTPServer", _StubServer)
+    monkeypatch.setattr(app, "_ExclusiveThreadingHTTPServer", _StubServer)  # local mode uses this one
     _use_dist(monkeypatch, tmp_path / "missing-dist")
     app.run_server(port=0)
     assert "npm run build" in capsys.readouterr().out

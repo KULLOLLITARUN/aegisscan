@@ -200,3 +200,39 @@ def test_scan_result_and_html_report_carry_the_issues(tmp_path: Path, monkeypatc
     generate_html(result, out)
     html_text = out.read_text(encoding="utf-8")
     assert "Incomplete:" in html_text and "timed out after 300 s" in html_text
+
+
+# ---------------------------------------------------------------- dedup determinism and speed
+def _spread(n: int) -> list[Finding]:
+    import random
+    rng = random.Random(7)
+    out = []
+    for i in range(n):
+        line = rng.randint(1, 300)
+        out.append(Finding(
+            file_path=Path(f"f{i % 400}.py"), issue_type=f"t{i % 5}",
+            category=rng.choice(["injection", "secrets", "best_practices"]), severity=Severity.HIGH,
+            confidence=rng.random(), line_start=line, line_end=line, evidence="x", explanation="t",
+            rule_source=rng.choice(["bandit", "semgrep", "llm"]),
+        ))
+    return out
+
+
+def test_deduplicate_gives_the_same_result_whatever_order_the_tools_reported_in() -> None:
+    import random
+    findings = _spread(1500)
+    expected, _ = deduplicate(findings)
+    ident = lambda fs: sorted((str(f.file_path), f.line_start, f.rule_source, f.issue_type, f.confidence) for f in fs)
+    for seed in range(4):
+        shuffled = findings[:]
+        random.Random(seed).shuffle(shuffled)
+        again, _ = deduplicate(shuffled)
+        assert ident(again) == ident(expected)
+
+
+def test_deduplicate_scales_to_thousands_of_findings() -> None:
+    import time
+    findings = _spread(6000)
+    start = time.perf_counter()
+    deduplicate(findings)
+    assert time.perf_counter() - start < 2.0      # about 0.05 s now; it took about 5 s with the old all-pairs scan

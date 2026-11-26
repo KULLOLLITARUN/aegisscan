@@ -211,19 +211,28 @@ def _drop_llm_echoes(findings: list[Finding]) -> list[Finding]:
     and the copy outranked the original. The clustering step cannot merge them, because it needs
     equal categories. The static finding has the exact location and the vaguer label, so it stays.
     """
-    static_notes = [f for f in findings if f.rule_source != "llm" and f.category == "best_practices"]
-    if not static_notes:
+    notes_by_file: dict[Path, list[Finding]] = {}
+    for f in findings:
+        if f.rule_source != "llm" and f.category == "best_practices":
+            notes_by_file.setdefault(f.file_path, []).append(f)
+    if not notes_by_file:
         return findings
     kept: list[Finding] = []
     for f in findings:
         if (
             f.rule_source == "llm"
             and f.category not in ("best_practices", *_HIGH_IMPACT_LLM_CATEGORIES)
-            and any(s.file_path == f.file_path and _ranges_intersect(s, f) for s in static_notes)
+            and any(_ranges_intersect(s, f) for s in notes_by_file.get(f.file_path, ()))
         ):
             continue
         kept.append(f)
     return kept
+
+
+def _cluster_order(f: Finding) -> tuple:
+    """Total order for clustering: by place in the file, then source, then what was said and how sure."""
+    return (str(f.file_path), f.category, f.line_start, f.line_end, _source_priority(f), f.rule_source,
+            f.issue_type, -f.confidence, f.severity.value)
 
 
 def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
@@ -240,18 +249,23 @@ def deduplicate(findings: list[Finding]) -> tuple[list[Finding], int]:
     total = len(findings)
     findings = _drop_llm_echoes(_collapse_same_spot(findings))
 
-    # Cluster findings
+    # Cluster findings. Two findings can only share a cluster when they have the same file and
+    # category, so each finding is compared with the clusters of its own (file, category) only.
+    # Findings are visited in position order, not input order, so the same set of findings always
+    # produces the same clusters whatever order the tools reported them in.
     clusters: list[list[Finding]] = []
+    by_bucket: dict[tuple[Path, str], list[list[Finding]]] = {}
 
-    for f in findings:
-        placed = False
-        for cluster in clusters:
+    for f in sorted(findings, key=_cluster_order):
+        bucket = by_bucket.setdefault((f.file_path, f.category), [])
+        for cluster in bucket:
             if _can_join(f, cluster):
                 cluster.append(f)
-                placed = True
                 break
-        if not placed:
-            clusters.append([f])
+        else:
+            cluster = [f]
+            bucket.append(cluster)
+            clusters.append(cluster)
 
     # Pick the best from each cluster
     kept: list[Finding] = []

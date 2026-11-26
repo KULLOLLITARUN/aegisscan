@@ -72,11 +72,24 @@ export function useLocalState({ enabled, token, scanResult, setScanResult, scann
 
   const setTriage = useCallback(async (finding, status) => {
     const key = findingKey(finding, target)
-    const res = await fetch('/api/triage', {
+    const send = () => fetch('/api/triage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
       body: JSON.stringify({ target, key, status }),
     })
+    let res
+    try {
+      res = await send()
+    } catch {
+      // The browser dropped the request before it reached the server (for example ERR_NETWORK_CHANGED
+      // after a Wi-Fi or VPN change). Saving a decision is idempotent, so try once more.
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      try {
+        res = await send()
+      } catch {
+        throw new Error('Could not reach the local server. Check that it is still running, then try again.')
+      }
+    }
     if (!res.ok) throw await toApiError(res)
     setTriageMap(await res.json())
   }, [target, token])

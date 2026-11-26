@@ -43,6 +43,7 @@ _MAX_JSON_BODY = 1024 * 1024  # scan requests are small JSON documents
 _MAX_EXPORT_BODY = 32 * 1024 * 1024  # an export carries a whole scan result (Django's is about 2 MB)
 _JSON_TYPE = "application/json"
 _TRIAGE_PATH = "/api/triage"
+_LOCAL_SCAN_LOCK = threading.Lock()
 # format -> (Content-Type, file extension)
 _EXPORT_FORMATS = {
     "html": ("text/html; charset=utf-8", "html"),
@@ -577,12 +578,16 @@ class AegisScanRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
             return
         _apply_privacy(p)
-        if p["api_key"]:
-            os.environ["GROQ_API_KEY"] = p["api_key"]
-        if stream:
-            self._local_stream(target_path, p)
-        else:
-            self._local_sync(target_path, p)
+        # One local scan at a time, as when the server handled a single request at a time: a scan sets
+        # the process-wide API key and log forwarding, so overlapping scans would mix them. Other
+        # requests (triage, history, results) are not held up by this lock.
+        with _LOCAL_SCAN_LOCK:
+            if p["api_key"]:
+                os.environ["GROQ_API_KEY"] = p["api_key"]
+            if stream:
+                self._local_stream(target_path, p)
+            else:
+                self._local_sync(target_path, p)
 
     def _local_stream(self, target_path: Path, p: dict) -> None:
         sse = self._open_sse()
@@ -838,7 +843,7 @@ class _ExclusiveHTTPServer(HTTPServer):
 
 
 class _ExclusiveThreadingHTTPServer(ThreadingMixIn, _ExclusiveHTTPServer):
-    """Hosted mode: one thread per request, so a long scan or SSE stream never blocks other users."""
+    """One thread per connection, so a long scan, an SSE stream or an idle browser socket never blocks other requests."""
 
     daemon_threads = True
 
@@ -861,7 +866,9 @@ def run_server(port: int = 8000) -> None:
         server_class = _ExclusiveThreadingHTTPServer
     else:
         server_address = ("127.0.0.1", port)
-        server_class = _ExclusiveHTTPServer
+        # Threaded here too: browsers keep several idle connections open, and a single-threaded
+        # server blocks on one of them so a later request (such as saving a triage decision) hangs.
+        server_class = _ExclusiveThreadingHTTPServer
     try:
         httpd = server_class(server_address, AegisScanRequestHandler)
     except OSError as exc:

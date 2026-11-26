@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -65,18 +66,51 @@ _LOCAL_RULES = _RULES_DIR / "js_security.yml"
 _LOCAL_RULE_FILES = tuple(sorted(_RULES_DIR.glob("*_security.yml")))
 
 
-def _infer_category(rule_id: str) -> str:
-    rl = rule_id.lower()
-    if any(k in rl for k in ("injection", "sqli", "xss", "ssrf", "rce", "command", "exec")):
-        return "injection"
-    if any(k in rl for k in ("secret", "key", "token", "credential", "password", "api-key")):
-        return "secrets"
-    if any(k in rl for k in ("auth", "access", "permission", "privilege", "csrf")):
-        return "access_control"
-    if any(k in rl for k in ("crypto", "hash", "cipher", "tls", "ssl", "rand")):
-        return "crypto"
-    if any(k in rl for k in ("perf", "performance", "n+1", "cache", "complexity")):
-        return "performance"
+# Words that decide a category. Matched against whole words of the rule id, never inside a word:
+# a substring test sent `monkey-patch` to secrets, `author` to access_control and `operand` to crypto.
+# `_CATEGORY_STEMS` are matched as word prefixes, which is safe for long stems (`injection`,
+# `credential`) and so also covers `credentials`, `hashing`, `exec`/`execute`.
+_CATEGORY_WORDS: tuple[tuple[str, frozenset[str], tuple[str, ...]], ...] = (
+    ("injection", frozenset({"sqli", "xss", "ssrf", "rce", "xxe"}), ("injection", "command", "exec")),
+    ("secrets", frozenset({"secret", "secrets", "key", "keys", "apikey", "token", "tokens", "password",
+                           "passwords", "passwd"}), ("credential",)),
+    ("access_control", frozenset({"auth", "authn", "authz", "csrf", "access", "permission", "permissions",
+                                  "privilege", "privileges"}), ("authentication", "authorization", "unauthenticated")),
+    ("crypto", frozenset({"crypto", "hash", "hashes", "cipher", "tls", "ssl", "rand", "random", "md5", "sha1"}),
+     ("cryptograph", "hashing", "encrypt", "decrypt")),
+    ("performance", frozenset({"perf", "performance", "n+1", "cache", "complexity"}), ()),
+)
+
+# CWE ids that name a category outright. A rule that carries a CWE is more reliable than its id.
+_CWE_CATEGORY: dict[int, str] = {
+    **dict.fromkeys((20, 22, 23, 77, 78, 79, 88, 89, 90, 91, 94, 95, 98, 113, 117, 502, 611, 643, 652, 918), "injection"),
+    **dict.fromkeys((256, 259, 321, 522, 532, 798), "secrets"),
+    **dict.fromkeys((284, 285, 287, 306, 352, 639, 862, 863), "access_control"),
+    **dict.fromkeys((295, 310, 326, 327, 328, 329, 330, 331, 338, 347), "crypto"),
+}
+
+
+def _category_from_cwe(metadata: object) -> str | None:
+    """Category named by the first mapped CWE in the rule's metadata, or None."""
+    if not isinstance(metadata, dict):
+        return None
+    cwe = metadata.get("cwe")
+    for entry in cwe if isinstance(cwe, list) else [cwe]:
+        match = re.search(r"CWE-(\d+)", str(entry or ""), re.IGNORECASE)
+        if match and int(match.group(1)) in _CWE_CATEGORY:
+            return _CWE_CATEGORY[int(match.group(1))]
+    return None
+
+
+def _infer_category(rule_id: str, metadata: object = None) -> str:
+    """Category for a Semgrep rule: its CWE if it names one, else whole words of the rule id."""
+    by_cwe = _category_from_cwe(metadata)
+    if by_cwe:
+        return by_cwe
+    words = [w for w in re.split(r"[^a-z0-9+]+", rule_id.lower()) if w]
+    for category, exact, stems in _CATEGORY_WORDS:
+        if any(w in exact or w.startswith(stems) for w in words):
+            return category
     return "best_practices"
 
 
@@ -250,7 +284,7 @@ def _normalize(item: dict) -> Finding:
     return Finding(
         file_path=Path(item["path"]),
         issue_type=meta.get("message", "Semgrep finding")[:120],
-        category=meta.get("metadata", {}).get("aegis_category") or _infer_category(item.get("check_id", "")),
+        category=meta.get("metadata", {}).get("aegis_category") or _infer_category(item.get("check_id", ""), meta.get("metadata")),
         severity=_SEMGREP_SEVERITY_MAP.get(sev, Severity.INFO),
         confidence=_rule_confidence(meta.get("metadata")) or _SEMGREP_CONFIDENCE.get(sev, 0.50),
         line_start=int(start.get("line", 1)),

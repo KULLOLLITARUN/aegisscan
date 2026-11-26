@@ -35,6 +35,30 @@ _RISKY_PATTERNS: list[re.Pattern] = [
     re.compile(r'\bxml\.(etree|sax|dom)'),                    # XML parsing (XXE risk)
     re.compile(r'\byaml\.load\s*\((?!.*Loader)'),             # unsafe yaml.load
     re.compile(r'\bdeserializ'),
+    # --- Java ---
+    re.compile(r'\bRuntime\.getRuntime\(\)\.exec\b'),
+    re.compile(r'\bnew\s+ProcessBuilder\b'),
+    re.compile(r'\b(ObjectInputStream|XMLDecoder)\b'),                       # unsafe deserialization
+    re.compile(r'\b(DocumentBuilderFactory|SAXParserFactory|XMLInputFactory)\b'),   # XXE
+    re.compile(r'\bMessageDigest\.getInstance\(\s*"(MD5|SHA-?1)"', re.IGNORECASE),
+    # --- JavaScript / TypeScript ---
+    re.compile(r'\bchild_process\b'),
+    re.compile(r'\bnew\s+Function\s*\('),
+    re.compile(r'\.(innerHTML|outerHTML)\s*=|\bdocument\.write\s*\(|\bdangerouslySetInnerHTML\b'),
+    re.compile(r'\bcreateHash\(\s*["\'](md5|sha1)["\']', re.IGNORECASE),
+    # --- Go ---
+    re.compile(r'\bexec\.Command(Context)?\s*\('),
+    re.compile(r'\b(md5|sha1)\.(New|Sum)\b'),
+    re.compile(r'\bInsecureSkipVerify\s*:\s*true'),
+    # --- PHP ---
+    re.compile(r'\bunserialize\s*\('),
+    re.compile(r'\b(shell_exec|passthru|proc_open|popen|system)\s*\('),
+    re.compile(r'\b(include|require)(_once)?\s*\(?\s*\$'),                   # file inclusion
+    # --- C# ---
+    re.compile(r'\bProcess\.Start\s*\('),
+    re.compile(r'\bBinaryFormatter\b'),
+    re.compile(r'\b(MD5|SHA1)(CryptoServiceProvider)?\.Create\s*\(|\bnew\s+(MD5|SHA1)CryptoServiceProvider\b'),
+    re.compile(r'\bnew\s+XmlDocument\b|\bXmlTextReader\b'),
 ]
 
 # Maximum chunk size to send to LLM (characters) — very large chunks are split

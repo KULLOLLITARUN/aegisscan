@@ -7,12 +7,15 @@ that actually executed (for ScanResult.static_tools_run).
 Design rules (plan §2):
   - Each tool is optional; absence → skip + warn, never crash.
   - All returns are list[Finding], never raw dicts.
-  - Tools run sequentially in V1; parallel execution is a V5 concern.
+  - Tools run in parallel; results are returned in a fixed order.
 """
 from __future__ import annotations
 
+import contextvars
 import logging
+import threading
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from scanner.config import load_config
@@ -111,47 +114,50 @@ def _run_all_tools(
             log.info("No changed files to scan; skipping static analysis")
             return [], []
 
-    _step("Bandit")
-    bandit_findings = _keep(run_bandit(target, config.exclude_dirs, files))
-    _done("Bandit", bandit_findings)
-    all_findings.extend(bandit_findings)
-    if "bandit" not in issues:
-        tools_run.append("bandit")
+    # The tools are independent, so they run side by side. Each one runs in a copy of this thread's
+    # context: the status collector is a ContextVar, and a worker thread would otherwise report its
+    # problems into nothing. Results are put back in a fixed order, so the output does not depend on
+    # which tool finishes first. Callbacks are serialised, since the UI and progress code assume one
+    # caller at a time.
+    callback_lock = threading.Lock()
 
-    # --- Semgrep (optional CLI) ---
-    _step("Semgrep")
-    semgrep_findings = _keep(run_semgrep(target, files, config.exclude_dirs))
-    _done("Semgrep", semgrep_findings)
-    all_findings.extend(semgrep_findings)
-    if "semgrep" not in issues:
-        tools_run.append("semgrep")
+    def _announce(name: str, found: list[Finding]) -> None:
+        with callback_lock:
+            _done(name, found)
 
-    # --- Gitleaks (optional CLI) ---
-    _step("Gitleaks")
-    gitleaks_findings = _keep(run_gitleaks(target, files, config.exclude_dirs))
-    _done("Gitleaks", gitleaks_findings)
-    all_findings.extend(gitleaks_findings)
-    if "gitleaks" not in issues:
-        tools_run.append("gitleaks")
-
-    # --- OSV-Scanner (optional CLI; dependency CVEs). It sends package names and versions to
-    # api.osv.dev, so --privacy strict switches it off. ---
+    # .aegisscan.toml's exclude_dirs applies to every tool, in full and scoped scans alike.
+    # (label, tool name in static_tools_run, runner). A None tool name means "always counts as run".
+    jobs: list[tuple[str, str | None, Callable[[], list[Finding]]]] = [
+        ("Bandit", "bandit", lambda: run_bandit(target, config.exclude_dirs, files)),
+        ("Semgrep", "semgrep", lambda: run_semgrep(target, files, config.exclude_dirs)),
+        ("Gitleaks", "gitleaks", lambda: run_gitleaks(target, files, config.exclude_dirs)),
+    ]
+    # OSV-Scanner sends package names and versions to api.osv.dev, so --privacy strict switches it off.
     if privacy == "strict":
         log.info("OSV-Scanner skipped: --privacy strict forbids sending package names to api.osv.dev")
     else:
-        _step("OSV-Scanner")
-        osv_findings = _keep(run_osv(target, files, config.exclude_dirs))
-        _done("OSV-Scanner", osv_findings)
-        all_findings.extend(osv_findings)
-        if "osv-scanner" not in issues:
-            tools_run.append("osv-scanner")
+        jobs.append(("OSV-Scanner", "osv-scanner", lambda: run_osv(target, files, config.exclude_dirs)))
+    # Pure-Python AST checks, always available.
+    jobs.append(("Optimizer", None, lambda: run_optimizer(target, set(config.exclude_dirs), files)))
 
-    # --- Optimizer (pure-Python AST checks, always available) ---
-    _step("Optimizer")
-    opt_findings = _keep(run_optimizer(target, set(config.exclude_dirs), files))
-    _done("Optimizer", opt_findings)
-    all_findings.extend(opt_findings)
-    tools_run.append("aegis-optimizer")
+    def _work(label: str, fn: Callable[[], list[Finding]]) -> list[Finding]:
+        found = _keep(fn())
+        _announce(label, found)
+        return found
+
+    with ThreadPoolExecutor(max_workers=len(jobs), thread_name_prefix="aegis-tool") as pool:
+        futures = []
+        for label, _tool, fn in jobs:
+            _step(label)
+            futures.append(pool.submit(contextvars.copy_context().run, _work, label, fn))
+        results = [f.result() for f in futures]  # re-raises the first failure, after all tools stopped
+
+    for (_label, tool, _fn), found in zip(jobs, results):
+        all_findings.extend(found)
+        if tool is None:
+            tools_run.append("aegis-optimizer")
+        elif tool not in issues:
+            tools_run.append(tool)
 
     for tool, reason in issues.items():
         log.warning("Static analysis: %s %s", tool, reason)

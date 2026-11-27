@@ -98,6 +98,25 @@ def _ci_hygiene_update(f: Finding) -> dict | None:
     return update or None
 
 
+_GITHUB_OWNED_ACTION = re.compile(r"\buses:\s*['\"]?(?:actions|github)/[\w.\-/]+@", re.IGNORECASE)
+
+
+def _is_github_owned_pin_note(f: Finding) -> bool:
+    """True for a "pin this action to a commit SHA" note about an action GitHub itself publishes.
+
+    Hand-labelled on redash and spring-petclinic: all 14 of these notes were noise. An
+    `actions/checkout@v4` tag is maintained by the platform owner; the supply-chain risk the note
+    describes applies to third-party actions, which are still reported.
+    """
+    if f.category != "best_practices" or f.rule_source == "llm" or "mutable" not in f.explanation.lower():
+        return False
+    try:
+        line = Path(f.file_path).read_text(encoding="utf-8", errors="replace").splitlines()[f.line_start - 1]
+    except (OSError, IndexError):
+        return False
+    return bool(_GITHUB_OWNED_ACTION.search(line))
+
+
 def cap_ci_hygiene(findings: list[Finding], root: Path) -> tuple[list[Finding], int]:
     """Cap "best practice" notes about `.github/` files at low severity.
 
@@ -110,7 +129,11 @@ def cap_ci_hygiene(findings: list[Finding], root: Path) -> tuple[list[Finding], 
     out: list[Finding] = []
     n = 0
     for f in findings:
-        update = _ci_hygiene_update(f) if _in_github_config(f.file_path, root) else None
+        in_config = _in_github_config(f.file_path, root)
+        if in_config and _is_github_owned_pin_note(f):
+            n += 1
+            continue
+        update = _ci_hygiene_update(f) if in_config else None
         if update:
             n += 1
             f = f.model_copy(update=update)

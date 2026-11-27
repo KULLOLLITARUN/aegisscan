@@ -249,9 +249,22 @@ class _Visitor(ast.NodeVisitor):
     def _visit_comprehension(self, node: ast.AST) -> None:
         # Comprehensions are loops too; query calls inside them are just as costly.
         generators = node.generators  # type: ignore[attr-defined]
+        # Python evaluates the first iterable once, before the loop starts, so a call there
+        # (`{k: v for k, v in db.execute(q)}`) is not a call per iteration.
+        self.visit(generators[0].iter)
         for gen in generators:
             self._push(_iter_key(gen.iter))
-        self.generic_visit(node)
+        for i, gen in enumerate(generators):
+            self.visit(gen.target)
+            if i:
+                self.visit(gen.iter)
+            for cond in gen.ifs:
+                self.visit(cond)
+        if isinstance(node, ast.DictComp):
+            self.visit(node.key)
+            self.visit(node.value)
+        else:
+            self.visit(node.elt)  # type: ignore[attr-defined]
         for _ in generators:
             self._pop()
 
